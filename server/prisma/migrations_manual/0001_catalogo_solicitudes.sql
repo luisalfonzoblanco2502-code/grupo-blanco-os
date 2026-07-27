@@ -1,10 +1,9 @@
--- Migración manual — aplicada directamente vía conexión de servicio el
--- 2026-07-27 (ver [[db-migration-safety]] en memoria del asistente para el
--- porqué de este archivo en vez de `prisma migrate dev`). Puramente
--- aditiva: crea 4 tablas nuevas y no modifica ninguna existente.
+-- Migración manual — pegar TODO este archivo en el SQL Editor de Supabase
+-- y presionar Run. Puramente aditiva: crea 4 tablas nuevas + 1 bucket de
+-- Storage, no modifica ninguna tabla existente.
 --
--- Después de correr esto: `npx prisma generate` (no hace falta `migrate dev`,
--- las tablas ya existen).
+-- Después de correr esto: `npx prisma generate` en server/ (no hace falta
+-- `migrate dev`, las tablas ya existen).
 
 CREATE TABLE productos (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
