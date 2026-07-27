@@ -45,9 +45,23 @@ dominio.
 
 ## Cómo agregar / cambiar imágenes
 
-1. Poner el archivo en `public/productos/` (ej. `public/productos/panoleta-005.jpg`).
-2. En `src/data/productos.js`, poner `imagenUrl: "/productos/panoleta-005.jpg"`.
-3. Si se deja `imagenUrl: null`, se muestra un recuadro vacío en vez de un ícono roto.
+Carpeta exacta: **`catalogo/public/productos/`**.
+
+Los 6 diseños de la plantilla ya esperan un archivo con este nombre exacto:
+
+| Código | Archivo esperado |
+|---|---|
+| PAN-001 | `pan-001.jpg` |
+| PAN-002 | `pan-002.jpg` |
+| PAN-003 | `pan-003.jpg` |
+| PAN-004 | `pan-004.jpg` |
+| PAN-005 | `pan-005.jpg` |
+| PAN-006 | `pan-006.jpg` |
+
+1. Poner el archivo con ESE nombre en `catalogo/public/productos/`.
+2. Si usás `.png` en vez de `.jpg`, cambiar la extensión en `imagenUrl` dentro de `src/data/productos.js` para ese producto.
+3. Si un diseño todavía no tiene foto, dejar `imagenUrl: null` — se muestra un recuadro vacío, no un ícono roto.
+4. Para un 7mo diseño en adelante: copiar un bloque en `productos.js`, ponerle `codigo: "PAN-007"` y usar `pan-007.jpg` como nombre de archivo.
 
 ## Desplegar (Vercel, sin repositorio Git remoto)
 
@@ -72,6 +86,18 @@ npx vercel --prod   # redeploy para que tome las variables nuevas
 Para conectar `catalogo.panaprice.com`: dashboard del proyecto → Settings →
 Domains → agregar el dominio y seguir las instrucciones de DNS (registro
 CNAME) que da Vercel.
+
+## Checklist de publicación y prueba desde el celular
+
+1. `npx vercel login` → `npx vercel --prod` (desde esta carpeta).
+2. En el dashboard de Vercel del proyecto: Settings → Environment Variables →
+   agregar `VITE_WHATSAPP_NUMERO=584220180173` y `VITE_DATA_SOURCE=local` →
+   `npx vercel --prod` de nuevo para que tomen efecto.
+3. Abrir el link público en el celular (no en la compu).
+4. Agregar 1 diseño al carrito, cambiar la cantidad, tocar "Enviar pedido por WhatsApp".
+5. Confirmar que WhatsApp abre con el número correcto y el mensaje trae
+   cliente, teléfono, ubicación, código, nombre, cantidad, precio y total.
+6. Confirmar que se ve bien sin hacer zoom ni scroll horizontal.
 
 ## Deuda técnica conocida (MVP de emergencia, 2026-07-27)
 

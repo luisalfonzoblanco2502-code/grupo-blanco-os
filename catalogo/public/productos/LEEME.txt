@@ -1,0 +1,13 @@
+Poné acá las fotos de cada pañoleta con el nombre EXACTO que espera
+src/data/productos.js (imagenUrl), por ejemplo:
+
+  pan-001.jpg
+  pan-002.jpg
+  pan-003.jpg
+  ...
+
+Formato: .jpg o .png (si usás .png, cambiá la extensión en imagenUrl
+dentro de productos.js para que coincida).
+
+Este archivo es solo para que la carpeta exista en el repositorio — se
+puede borrar cuando ya haya imágenes reales adentro.

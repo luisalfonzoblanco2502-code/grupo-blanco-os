@@ -1,73 +1,95 @@
-// Catálogo local temporal — fuente de datos mientras Supabase no está
-// conectado (ver VITE_DATA_SOURCE en .env). Mismo shape que devuelve la API
-// real (`GET /api/publico/productos`) para que api.js pueda intercambiar la
-// fuente sin que ningún componente se entere.
+// Catálogo local — fuente de datos para el lanzamiento de hoy (ver
+// VITE_DATA_SOURCE=local en .env). Mismo shape que devuelve la API real
+// (GET /api/publico/productos) para que api.js pueda intercambiar la fuente
+// sin que ningún componente se entere.
 //
-// CÓMO AGREGAR / EDITAR PRODUCTOS (sin tocar código):
-//   1. Copiá un objeto de abajo y cambiá sus valores.
-//   2. `codigo` es el código interno que se muestra al cliente (ej. PAN-001)
-//      — todavía no existe en el modelo Producto de Supabase, es exclusivo
-//      de este catálogo temporal (ver nota de deuda técnica en README).
-//   3. `imagenUrl`: subí el archivo a catalogo/public/productos/ y poné acá
-//      la ruta "/productos/archivo.jpg". Si lo dejás en null se muestra un
-//      recuadro vacío en vez de un ícono de imagen rota.
-//   4. `preciosVolumen` es opcional — si no aplica descuento por cantidad,
-//      dejá el array vacío `[]`.
-//   5. Guardá, hacé commit y volvé a desplegar (`vercel --prod` desde
-//      catalogo/) — el enlace público NO cambia.
+// CÓMO COMPLETAR CADA DISEÑO (los 6 de abajo son plantilla, no datos reales):
+//   1. `nombre`   -> nombre real del diseño (lo ve el cliente).
+//   2. `precioBase` -> precio en la moneda que uses, sin símbolo (ej. 8.5).
+//   3. `imagenUrl` -> ya apunta al archivo esperado en
+//      catalogo/public/productos/pan-00X.jpg — solo tenés que poner el
+//      archivo con ESE nombre exacto ahí (ver instrucciones en README.md).
+//      Si un diseño todavía no tiene foto, dejalo en `null` (muestra un
+//      recuadro vacío, no un ícono roto).
+//   4. `preciosVolumen` es opcional — dejalo `[]` si no hay descuento por
+//      cantidad para ese diseño, o agregá escalones como en el ejemplo.
+//   5. Para agregar un 7mo diseño: copiá un bloque entero, cambiá `id`,
+//      `codigo` (ej. PAN-007) y el nombre del archivo de imagen a juego
+//      (pan-007.jpg).
+// Guardá, hacé commit y `npx vercel --prod` de nuevo — el enlace público
+// NO cambia.
 export const productosLocal = [
   {
     id: "local-1",
     codigo: "PAN-001",
-    nombre: "Pañoleta Flores Tropicales",
+    nombre: "Diseño 01 (completar nombre real)",
     categoria: "panoleta",
-    descripcion: "Sublimado full color, tela microfibra 90x90cm.",
-    imagenUrl: null,
-    precioBase: 8.5,
+    descripcion: "",
+    imagenUrl: "/productos/pan-001.jpg",
+    precioBase: 0,
     activo: true,
     publicadoCatalogo: true,
-    preciosVolumen: [
-      { id: "v1", cantidadMinima: 12, precioUnitario: 7.5 },
-      { id: "v2", cantidadMinima: 24, precioUnitario: 6.8 },
-    ],
+    preciosVolumen: [],
   },
   {
     id: "local-2",
     codigo: "PAN-002",
-    nombre: "Pañoleta Geométrica Azul",
+    nombre: "Diseño 02 (completar nombre real)",
     categoria: "panoleta",
-    descripcion: "Sublimado full color, tela microfibra 90x90cm.",
-    imagenUrl: null,
-    precioBase: 8.5,
+    descripcion: "",
+    imagenUrl: "/productos/pan-002.jpg",
+    precioBase: 0,
     activo: true,
     publicadoCatalogo: true,
-    preciosVolumen: [
-      { id: "v1", cantidadMinima: 12, precioUnitario: 7.5 },
-      { id: "v2", cantidadMinima: 24, precioUnitario: 6.8 },
-    ],
+    preciosVolumen: [],
   },
   {
     id: "local-3",
     codigo: "PAN-003",
-    nombre: "Pañoleta Animal Print",
+    nombre: "Diseño 03 (completar nombre real)",
     categoria: "panoleta",
-    descripcion: "Sublimado full color, tela microfibra 90x90cm.",
-    imagenUrl: null,
-    precioBase: 9.0,
+    descripcion: "",
+    imagenUrl: "/productos/pan-003.jpg",
+    precioBase: 0,
     activo: true,
     publicadoCatalogo: true,
-    preciosVolumen: [{ id: "v1", cantidadMinima: 12, precioUnitario: 8.0 }],
+    preciosVolumen: [],
   },
   {
     id: "local-4",
     codigo: "PAN-004",
-    nombre: "Pañoleta Diseño Personalizado",
+    nombre: "Diseño 04 (completar nombre real)",
     categoria: "panoleta",
-    descripcion: "Enviá tu logo o diseño — te contactamos para confirmar el arte.",
-    imagenUrl: null,
-    precioBase: 9.5,
+    descripcion: "",
+    imagenUrl: "/productos/pan-004.jpg",
+    precioBase: 0,
     activo: true,
     publicadoCatalogo: true,
-    preciosVolumen: [{ id: "v1", cantidadMinima: 12, precioUnitario: 8.5 }],
+    preciosVolumen: [],
+  },
+  {
+    id: "local-5",
+    codigo: "PAN-005",
+    nombre: "Diseño 05 (completar nombre real)",
+    categoria: "panoleta",
+    descripcion: "",
+    imagenUrl: "/productos/pan-005.jpg",
+    precioBase: 0,
+    activo: true,
+    publicadoCatalogo: true,
+    preciosVolumen: [],
+  },
+  {
+    id: "local-6",
+    codigo: "PAN-006",
+    nombre: "Diseño 06 (completar nombre real)",
+    categoria: "panoleta",
+    descripcion: "",
+    // Ejemplo de escalón de precio por volumen — borralo si no aplica:
+    imagenUrl: "/productos/pan-006.jpg",
+    precioBase: 0,
+    activo: true,
+    publicadoCatalogo: true,
+    preciosVolumen: [{ id: "v1", cantidadMinima: 12, precioUnitario: 0 }],
   },
 ];

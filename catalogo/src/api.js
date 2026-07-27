@@ -89,7 +89,7 @@ export function armarLinkWhatsApp({ cliente, lineas, total }) {
   const detalleItems = lineas
     .map((l) => {
       const nota = l.disenoNotas ? ` (${l.disenoNotas})` : "";
-      return `- ${l.cantidad}x ${l.producto.nombre} [${l.producto.codigo}]${nota} — $${l.subtotal.toFixed(2)}`;
+      return `- [${l.producto.codigo}] ${l.producto.nombre}${nota} — ${l.cantidad}x $${l.unitario.toFixed(2)} = $${l.subtotal.toFixed(2)}`;
     })
     .join("\n");
 
