@@ -1,0 +1,152 @@
+:root {
+  --text: #1f2430;
+  --text-muted: #5b6472;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #dde1e6;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --danger: #dc2626;
+  font: 16px/1.5 system-ui, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e5e7eb;
+    --text-muted: #9ca3af;
+    --bg: #12141a;
+    --surface: #1b1e26;
+    --border: #2e323c;
+    --accent: #60a5fa;
+    --accent-text: #0b0f1a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.app-header nav a {
+  margin-left: 1rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+a {
+  color: var(--accent);
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.tabla th,
+.tabla td {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 640px;
+}
+
+.form fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.form label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.item-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.btn-primary,
+a.btn-primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  background: var(--surface);
+  min-width: 10rem;
+}
+
+.card-valor {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.card-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}

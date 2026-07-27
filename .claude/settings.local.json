@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/PANAPRICE/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/**)",
+      "Read(//c/Users/PANAPRICE/.claude/plugins/**)",
+      "Read(//c/Users/PANAPRICE/.claude/**)",
+      "Bash(mkdir -p \"/c/Users/PANAPRICE/Documents/CLAUDE/.claude/skills\")",
+      "Bash(cp -r \"/c/Users/PANAPRICE/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator\" \"/c/Users/PANAPRICE/Documents/CLAUDE/.claude/skills/skill-creator\")"
+    ]
+  }
+}

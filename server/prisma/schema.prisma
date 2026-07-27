@@ -1,0 +1,392 @@
+// ============================================================================
+// Grupo Blanco OS — schema.prisma
+//
+// Este archivo describe el schema PÚBLICO que YA EXISTE en el proyecto de
+// Supabase "grupo-blanco-os". No fue creado por Prisma y Prisma NO debe
+// asumir que le pertenece: es fuente oficial de verdad, escrita a mano
+// a partir de introspección de solo lectura (2026-07-26).
+//
+// REGLAS para quien edite este archivo:
+//   1. No renombrar columnas/tablas reales vía @map/@@map sin verificar
+//      contra la base real — @map/@@map aquí documentan nombres YA EXISTENTES.
+//   2. No correr `prisma migrate dev` / `db push` contra este schema sin
+//      revisar el SQL generado primero (ver notas de CHECK constraints e
+//      índices parciales más abajo — Prisma no puede expresarlos y podría
+//      proponer alterarlos/eliminarlos).
+//   3. El schema `auth` (Supabase Auth) NO se modela aquí a propósito.
+//      `usuarios.authUserId` es un UUID plano sin relación Prisma porque
+//      no existe una FK real hacia auth.users (se valida por convención).
+// ============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["views"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// NÚCLEO
+// ----------------------------------------------------------------------------
+
+/// Cada empresa del grupo (Panaprice Custom, Punto Ele, Grupo Blanco, futuras).
+/// Hoy solo existe 1 fila ("Grupo Blanco"). RLS: NO habilitado todavía.
+model Empresa {
+  id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre   String
+  creadoEn DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  usuarios          Usuario[]
+  pedidos           Pedido[]
+  ordenesProduccion OrdenProduccion[]
+  bitacoraEventos   BitacoraEvento[]
+  auditoriaSistema  AuditoriaSistema[]
+  productos         Producto[]
+  solicitudesPedido SolicitudPedido[]
+
+  @@map("empresas")
+}
+
+/// Perfil de negocio de cada persona. Se vincula a Supabase Auth vía
+/// authUserId (auth.users.id) — SIN relación Prisma, ver nota de cabecera.
+/// RLS: NO habilitado todavía.
+model Usuario {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Corresponde a auth.users.id (Supabase Auth). No toda fila lo tiene:
+  /// hay usuarios de negocio sin acceso de login todavía.
+  authUserId String?  @unique @map("auth_user_id") @db.Uuid
+  empresaId  String   @map("empresa_id") @db.Uuid
+  empresa    Empresa  @relation(fields: [empresaId], references: [id])
+  nombre     String
+  email      String   @unique
+  rolId      String   @map("rol_id") @db.Uuid
+  rol        Rol      @relation(fields: [rolId], references: [id])
+  activo     Boolean  @default(true)
+  creadoEn   DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  puestoId   Int?     @map("puesto_id")
+  puesto     Puesto?  @relation(fields: [puestoId], references: [id])
+
+  pedidosCreados     Pedido[]           @relation("PedidoCreadoPor")
+  ordenesResponsable OrdenProduccion[]  @relation("OrdenResponsableUsuario")
+  bitacoraEventos    BitacoraEvento[]
+  auditoriaSistema   AuditoriaSistema[]
+
+  @@map("usuarios")
+}
+
+/// Rol de acceso. `permisos` es un mapa JSONB de permisos con nombre
+/// (crear_pedido, cambiar_etapa, gestionar_usuarios, etc.), NO una tabla
+/// relacional Rol-Permiso. Es GLOBAL (sin empresaId) — ver plan de RLS
+/// para la decisión pendiente sobre si esto debe seguir así.
+model Rol {
+  id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre   String   @unique
+  permisos Json     @default("{}")
+  creadoEn DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  usuarios Usuario[]
+
+  @@map("roles")
+}
+
+/// Posición laboral (Vendedor, Diseñador, Operador de plotter, ...).
+/// GLOBAL (sin empresaId) — mismo punto de decisión que Rol/Etapa/Prioridad.
+model Puesto {
+  id     Int    @id @default(autoincrement())
+  nombre String @unique
+
+  usuarios Usuario[]
+  etapas   Etapa[]
+
+  @@map("puestos")
+}
+
+// ----------------------------------------------------------------------------
+// PRODUCCIÓN (existente — Pedido y OrdenProduccion son entidades separadas)
+// ----------------------------------------------------------------------------
+
+/// Lo que pidió el cliente. El cliente hoy es TEXTO LIBRE (clienteNombre) —
+/// no existe todavía una tabla `clientes` relacional (a propósito, por
+/// instrucción explícita: no se crea en esta fase).
+model Pedido {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  empresa         Empresa   @relation(fields: [empresaId], references: [id])
+  /// Identificador legible de negocio, único por empresa (no global).
+  pedId           String    @map("ped_id")
+  clienteNombre   String    @map("cliente_nombre")
+  fechaIngreso    DateTime  @map("fecha_ingreso") @db.Date
+  fechaCompromiso DateTime  @map("fecha_compromiso") @db.Date
+  /// CHECK constraint en BD: cantidad_total > 0 (no expresable en Prisma DSL).
+  cantidadTotal   Int       @map("cantidad_total")
+  observaciones   String?
+  creadoPorId     String?   @map("creado_por") @db.Uuid
+  creadoPor       Usuario?  @relation("PedidoCreadoPor", fields: [creadoPorId], references: [id])
+  creadoEn        DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn   DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+  /// Soft delete. Toda query de negocio debe filtrar eliminadoEn: null.
+  eliminadoEn     DateTime? @map("eliminado_en") @db.Timestamptz(6)
+
+  ordenesProduccion OrdenProduccion[]
+  solicitudesOrigen SolicitudPedido[]
+
+  @@unique([empresaId, pedId])
+  @@map("pedidos")
+}
+
+/// Unidad de trabajo en planta. Un Pedido puede generar varias
+/// OrdenProduccion independientes (una por producto/línea).
+///
+/// CHECK constraint en BD (no expresable en Prisma DSL, DEBE validarse
+/// también en la app): exactamente uno de responsableUsuarioId /
+/// responsableExterno debe estar presente (XOR).
+model OrdenProduccion {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pedidoId             String    @map("pedido_id") @db.Uuid
+  pedido               Pedido    @relation(fields: [pedidoId], references: [id])
+  empresaId            String    @map("empresa_id") @db.Uuid
+  empresa              Empresa   @relation(fields: [empresaId], references: [id])
+  /// Identificador legible de negocio, único por empresa.
+  opId                 String    @map("op_id")
+  /// Producto/tipo de trabajo/medida son TEXTO LIBRE — no existe catálogo
+  /// de productos todavía (a propósito, no se crea en esta fase).
+  producto             String
+  /// CHECK constraint en BD: cantidad > 0.
+  cantidad             Int
+  tipoTrabajo          String?   @map("tipo_trabajo")
+  medida               String?
+  etapaId              Int       @map("etapa_id")
+  etapa                Etapa     @relation(fields: [etapaId], references: [id])
+  prioridadId          Int       @map("prioridad_id")
+  prioridad            Prioridad @relation(fields: [prioridadId], references: [id])
+  responsableUsuarioId String?   @map("responsable_usuario_id") @db.Uuid
+  responsableUsuario   Usuario?  @relation("OrdenResponsableUsuario", fields: [responsableUsuarioId], references: [id])
+  /// Texto libre para trabajo tercerizado (ej. confección externa).
+  responsableExterno   String?   @map("responsable_externo")
+  fechaEntregaReal     DateTime? @map("fecha_entrega_real") @db.Date
+  observaciones        String?
+  creadoEn             DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn        DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+  eliminadoEn          DateTime? @map("eliminado_en") @db.Timestamptz(6)
+
+  bitacoraEventos BitacoraEvento[]
+
+  @@unique([empresaId, opId])
+  // Nota: en la BD real estos dos índices son PARCIALES (WHERE eliminado_en
+  // IS NULL). Prisma no soporta índices parciales en su DSL — estas
+  // declaraciones son una aproximación. NO correr `migrate dev`/`db push`
+  // sin revisar el diff: Prisma podría proponer recrearlos sin el WHERE.
+  @@index([pedidoId], map: "idx_op_pedido")
+  @@index([responsableUsuarioId], map: "idx_op_responsable")
+  @@index([empresaId, etapaId], map: "idx_op_empresa_etapa")
+  @@map("ordenes_produccion")
+}
+
+/// Pipeline de producción, configurable en base de datos (no hardcodeado).
+/// GLOBAL (sin empresaId) — punto de decisión pendiente: ¿todas las
+/// empresas del grupo comparten el mismo pipeline de etapas?
+model Etapa {
+  id                Int     @id @default(autoincrement())
+  nombre            String  @unique
+  /// Orden secuencial del pipeline (no hay tabla de "transiciones
+  /// permitidas" — a diferencia del prototipo anterior de este repo).
+  orden             Int     @unique
+  puestoRequeridoId Int?    @map("puesto_requerido_id")
+  puestoRequerido   Puesto? @relation(fields: [puestoRequeridoId], references: [id])
+  requiereExterno   Boolean @default(false) @map("requiere_externo")
+
+  ordenesProduccion OrdenProduccion[]
+
+  @@map("etapas")
+}
+
+/// GLOBAL (sin empresaId) — mismo punto de decisión que Etapa/Rol/Puesto.
+model Prioridad {
+  id     Int    @id @default(autoincrement())
+  nombre String @unique
+  peso   Int    @unique
+
+  ordenesProduccion OrdenProduccion[]
+
+  @@map("prioridades")
+}
+
+/// Historial de cambios de una OrdenProduccion, genérico (campo/valor
+/// anterior/valor nuevo), NO solo de estado. Protegido por trigger de BD
+/// `bloquear_modificacion_bitacora`: UPDATE y DELETE están bloqueados a
+/// nivel de Postgres, sin importar permisos de aplicación. Es la app
+/// (Express) la que inserta estas filas — no hay trigger que lo automatice.
+model BitacoraEvento {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ordenProduccionId String          @map("orden_produccion_id") @db.Uuid
+  ordenProduccion   OrdenProduccion @relation(fields: [ordenProduccionId], references: [id])
+  empresaId         String          @map("empresa_id") @db.Uuid
+  empresa           Empresa         @relation(fields: [empresaId], references: [id])
+  tipoEvento        String          @map("tipo_evento")
+  campoAfectado     String?         @map("campo_afectado")
+  valorAnterior     String?         @map("valor_anterior")
+  valorNuevo        String?         @map("valor_nuevo")
+  usuarioId         String?         @map("usuario_id") @db.Uuid
+  usuario           Usuario?        @relation(fields: [usuarioId], references: [id])
+  ocurridoEn        DateTime        @default(now()) @map("ocurrido_en") @db.Timestamptz(6)
+
+  @@map("bitacora_eventos")
+}
+
+/// Auditoría de seguridad (quién hizo qué acción, desde qué IP). Existe
+/// pero tiene 0 filas — todavía no se usa. RLS: NO habilitado (gap de
+/// seguridad más urgente, ver plan de RLS).
+model AuditoriaSistema {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId  String?  @map("empresa_id") @db.Uuid
+  empresa    Empresa? @relation(fields: [empresaId], references: [id])
+  usuarioId  String?  @map("usuario_id") @db.Uuid
+  usuario    Usuario? @relation(fields: [usuarioId], references: [id])
+  accion     String
+  detalle    Json?
+  ip         String?
+  ocurridoEn DateTime @default(now()) @map("ocurrido_en") @db.Timestamptz(6)
+
+  @@map("auditoria_sistema")
+}
+
+/// ----------------------------------------------------------------------------
+// CATÁLOGO PÚBLICO Y SOLICITUDES DE PEDIDO (Sprint 10)
+//
+// Objetivo: catalogo.panaprice.com muestra Producto (solo activo+publicado),
+// el cliente arma un carrito y envía una SolicitudPedido SIN autenticarse.
+// El equipo la revisa en el ERP y, al aprobarla, `solicitudes.service.js`
+// llama al `crearPedido()` YA EXISTENTE en pedidos.service.js — no se
+// duplica lógica de negocio, el resto del flujo (facturar → producción)
+// es el mismo de siempre.
+// ----------------------------------------------------------------------------
+
+/// Producto vendible en el catálogo público. `activo` = utilizable en el
+/// sistema en general; `publicadoCatalogo` = visible en catalogo.panaprice.com.
+/// Son independientes a propósito: un producto puede estar activo para uso
+/// interno (ej. referenciarlo en una Orden de Producción manual) sin todavía
+/// estar listo para mostrarse a clientes.
+model Producto {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId         String    @map("empresa_id") @db.Uuid
+  empresa           Empresa   @relation(fields: [empresaId], references: [id])
+  nombre            String
+  /// Texto libre por ahora (ej. "panoleta", "pareo") — mismo criterio que
+  /// OrdenProduccion.tipoTrabajo: no existe todavía una tabla de categorías.
+  categoria         String
+  descripcion       String?
+  imagenUrl         String?   @map("imagen_url")
+  /// Precio de referencia mostrado en el catálogo antes de aplicar
+  /// descuentos por volumen (ver ProductoPrecioVolumen).
+  precioBase        Decimal   @map("precio_base") @db.Decimal(10, 2)
+  activo            Boolean   @default(true)
+  publicadoCatalogo Boolean   @default(false) @map("publicado_catalogo")
+  creadoEn          DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn     DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+  eliminadoEn       DateTime? @map("eliminado_en") @db.Timestamptz(6)
+
+  preciosVolumen ProductoPrecioVolumen[]
+  solicitudItems SolicitudPedidoItem[]
+
+  @@index([empresaId, publicadoCatalogo, activo])
+  @@map("productos")
+}
+
+/// Escalón de precio por volumen: "a partir de cantidadMinima unidades,
+/// precioUnitario". El primer escalón (cantidadMinima más baja) normalmente
+/// coincide con precioBase, pero no se fuerza esa igualdad en el modelo.
+model ProductoPrecioVolumen {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productoId     String   @map("producto_id") @db.Uuid
+  producto       Producto @relation(fields: [productoId], references: [id])
+  cantidadMinima Int      @map("cantidad_minima")
+  precioUnitario Decimal  @map("precio_unitario") @db.Decimal(10, 2)
+
+  @@index([productoId])
+  @@map("producto_precios_volumen")
+}
+
+/// Solicitud enviada desde el catálogo público (sin autenticación). A
+/// diferencia de `pedidos`, esta tabla SÍ tiene columna `estado` mutable: es
+/// una tabla nueva (sin la restricción histórica de `pedidos`, ver
+/// pedidoEstado.service.js) y el equipo necesita poder filtrar rápido
+/// "solicitudes pendientes de revisión" como bandeja de entrada, sin
+/// recalcular el estado desde un log de eventos en cada consulta.
+model SolicitudPedido {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId            String    @map("empresa_id") @db.Uuid
+  empresa              Empresa   @relation(fields: [empresaId], references: [id])
+  /// Identificador legible de negocio, único por empresa (mismo patrón que
+  /// Pedido.pedId / OrdenProduccion.opId).
+  solId                String    @map("sol_id")
+  clienteNombre        String    @map("cliente_nombre")
+  clienteTelefono      String    @map("cliente_telefono")
+  clienteEmail         String?   @map("cliente_email")
+  notasPersonalizacion String?   @map("notas_personalizacion")
+  /// RECIBIDA | EN_REVISION | APROBADA | RECHAZADA | CORRECCION_SOLICITADA | CONVERTIDA
+  /// (ver ESTADOS_SOLICITUD en solicitudes.service.js).
+  estado               String    @default("RECIBIDA")
+  motivoRechazo        String?   @map("motivo_rechazo")
+  /// Se completa únicamente cuando estado pasa a CONVERTIDA.
+  pedidoId             String?   @map("pedido_id") @db.Uuid
+  pedido               Pedido?   @relation(fields: [pedidoId], references: [id])
+  creadoEn             DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn        DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+
+  items SolicitudPedidoItem[]
+
+  @@unique([empresaId, solId])
+  @@index([empresaId, estado])
+  @@map("solicitudes_pedido")
+}
+
+/// Línea de una SolicitudPedido: un producto, cantidad y notas de
+/// personalización/diseño puntuales de esa línea (ej. "logo en la esquina
+/// superior izquierda"). El precio unitario estimado se congela al crear la
+/// solicitud (aplicando ProductoPrecioVolumen) para que cambios posteriores
+/// de precio no alteren solicitudes ya enviadas.
+model SolicitudPedidoItem {
+  id                     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  solicitudId            String          @map("solicitud_id") @db.Uuid
+  solicitud              SolicitudPedido @relation(fields: [solicitudId], references: [id])
+  productoId             String          @map("producto_id") @db.Uuid
+  producto               Producto        @relation(fields: [productoId], references: [id])
+  cantidad               Int
+  disenoNotas            String?         @map("diseno_notas")
+  precioUnitarioEstimado Decimal?        @map("precio_unitario_estimado") @db.Decimal(10, 2)
+
+  @@index([solicitudId])
+  @@map("solicitud_pedido_items")
+}
+
+// Vista de solo lectura para reportes/dashboard. Prisma puede leerla
+/// (`prisma.vOrdenesProduccionEstado.findMany()`) pero nunca escribirla.
+/// Lógica de "situacion"/"diasRestantes" vive en la definición SQL de la
+/// vista (ver informe de introspección), no se re-implementa en Prisma.
+view VOrdenesProduccionEstado {
+  id                   String    @id @db.Uuid
+  pedidoId             String    @map("pedido_id") @db.Uuid
+  empresaId            String    @map("empresa_id") @db.Uuid
+  opId                 String    @map("op_id")
+  producto             String
+  cantidad             Int
+  tipoTrabajo          String?   @map("tipo_trabajo")
+  medida               String?
+  etapaId              Int       @map("etapa_id")
+  prioridadId          Int       @map("prioridad_id")
+  responsableUsuarioId String?   @map("responsable_usuario_id") @db.Uuid
+  responsableExterno   String?   @map("responsable_externo")
+  fechaEntregaReal     DateTime? @map("fecha_entrega_real") @db.Date
+  observaciones        String?
+  creadoEn             DateTime? @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn        DateTime? @map("actualizado_en") @db.Timestamptz(6)
+  eliminadoEn          DateTime? @map("eliminado_en") @db.Timestamptz(6)
+  estaEntregada        Boolean?  @map("esta_entregada")
+  situacion            String?
+  diasRestantes        Int?      @map("dias_restantes")
+
+  @@map("v_ordenes_produccion_estado")
+}

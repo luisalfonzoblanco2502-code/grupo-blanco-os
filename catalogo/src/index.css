@@ -1,0 +1,266 @@
+/* Look & feel deliberadamente distinto del ERP (client/index.css): esta es
+   la "tienda", no el panel de administración. */
+:root {
+  --texto: #2b2118;
+  --texto-suave: #8a7a6a;
+  --fondo: #fdf8f3;
+  --superficie: #ffffff;
+  --borde: #ece1d4;
+  --acento: #c2410c;
+  --acento-texto: #ffffff;
+  --error: #b91c1c;
+  font: 16px/1.5 "Segoe UI", system-ui, sans-serif;
+  color-scheme: light dark;
+  color: var(--texto);
+  background: var(--fondo);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --texto: #f1e9df;
+    --texto-suave: #b8a894;
+    --fondo: #1c1712;
+    --superficie: #26201a;
+    --borde: #3a3226;
+    --acento: #fb923c;
+    --acento-texto: #1c1712;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.pagina {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--borde);
+}
+
+.cabecera h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+}
+
+.btn-carrito {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--acento);
+  background: var(--superficie);
+  color: var(--acento);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.grilla-productos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.25rem;
+}
+
+.producto-card {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.producto-card img,
+.producto-imagen-vacia {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--borde);
+}
+
+.producto-info {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.producto-codigo {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--acento);
+  font-weight: 700;
+  font-family: "Courier New", monospace;
+}
+
+.producto-info h3 {
+  margin: 0;
+}
+
+.producto-descripcion {
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.producto-precio {
+  font-weight: 700;
+  margin: 0.25rem 0 0;
+}
+
+.producto-volumen {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+
+.btn-primary {
+  font: inherit;
+  margin-top: 0.5rem;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--acento);
+  color: var(--acento-texto);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.checkout {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.linea-carrito {
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  background: var(--superficie);
+}
+
+.linea-precio {
+  color: var(--texto-suave);
+  margin-left: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.linea-controles {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.linea-controles input[type="number"] {
+  width: 4.5rem;
+}
+
+.linea-controles input[type="text"] {
+  flex: 1;
+  min-width: 10rem;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.total {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.form-checkout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.form-checkout label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--texto-suave);
+}
+
+.error {
+  color: var(--error);
+}
+
+.confirmacion {
+  max-width: 480px;
+  margin: 3rem auto;
+  text-align: center;
+}
+
+.confirmacion .btn-primary {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.nota-tecnica {
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+  margin-top: 1.5rem;
+}
+
+/* Mobile-first: los estilos base ya apilan bien en pantallas angostas
+   (grilla-productos colapsa a 1 columna sola con auto-fill/minmax). Estos
+   ajustes son para los ~360-400px de un teléfono real, donde el header y
+   los inputs de línea necesitan más aire vertical que horizontal. */
+@media (max-width: 480px) {
+  .pagina {
+    padding: 0.75rem;
+  }
+
+  .cabecera {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
+
+  .btn-carrito {
+    width: 100%;
+  }
+
+  .linea-controles {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .linea-controles input[type="number"],
+  .linea-controles input[type="text"] {
+    width: 100%;
+  }
+
+  .form-checkout button {
+    width: 100%;
+  }
+}
