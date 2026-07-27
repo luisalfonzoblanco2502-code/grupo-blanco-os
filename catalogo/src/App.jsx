@@ -15,6 +15,7 @@ function precioUnitario(producto, cantidad) {
 }
 
 function ProductoCard({ producto, onAgregar }) {
+  const agotado = producto.disponible === false;
   return (
     <div className="producto-card">
       {producto.imagenUrl ? (
@@ -23,7 +24,10 @@ function ProductoCard({ producto, onAgregar }) {
         <div className="producto-imagen-vacia" aria-hidden="true" />
       )}
       <div className="producto-info">
-        <span className="producto-codigo">{producto.codigo}</span>
+        <span className="producto-codigo">
+          {producto.codigo}
+          {agotado && <span className="badge-agotado"> · Agotado</span>}
+        </span>
         <h3>{producto.nombre}</h3>
         {producto.descripcion && <p className="producto-descripcion">{producto.descripcion}</p>}
         <p className="producto-precio">desde ${Number(producto.precioBase).toFixed(2)}</p>
@@ -36,8 +40,8 @@ function ProductoCard({ producto, onAgregar }) {
             ))}
           </ul>
         )}
-        <button className="btn-primary" onClick={() => onAgregar(producto)}>
-          Agregar al pedido
+        <button className="btn-primary" onClick={() => onAgregar(producto)} disabled={agotado}>
+          {agotado ? "Agotado" : "Agregar al pedido"}
         </button>
       </div>
     </div>

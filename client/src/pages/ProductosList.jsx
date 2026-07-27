@@ -7,55 +7,107 @@ export function ProductosList() {
   const [productos, setProductos] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [procesandoId, setProcesandoId] = useState(null);
+
+  function recargar() {
+    return api.getProductos().then(setProductos).catch((err) => setError(err.message));
+  }
 
   useEffect(() => {
-    api
-      .getProductos()
-      .then(setProductos)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    recargar().finally(() => setLoading(false));
   }, []);
 
+  async function alternarPublicado(producto) {
+    setProcesandoId(producto.id);
+    try {
+      await api.updateProducto(producto.id, { publicadoCatalogo: !producto.publicadoCatalogo });
+      await recargar();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProcesandoId(null);
+    }
+  }
+
+  async function alternarDisponible(producto) {
+    setProcesandoId(producto.id);
+    try {
+      await api.updateProducto(producto.id, { disponible: !producto.disponible });
+      await recargar();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProcesandoId(null);
+    }
+  }
+
+  async function eliminar(producto) {
+    if (!confirm(`¿Eliminar "${producto.nombre}"? Deja de verse en todos lados, no se puede deshacer.`)) return;
+    setProcesandoId(producto.id);
+    try {
+      await api.eliminarProducto(producto.id);
+      await recargar();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProcesandoId(null);
+    }
+  }
+
   if (loading) return <p>Cargando...</p>;
-  if (error) return <p style={{ color: "#f87171" }}>{error}</p>;
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1>Productos</h1>
         <Link to="/productos/nuevo" className="btn-primary">
-          + Nuevo producto
+          + Agregar producto
         </Link>
       </div>
       <p style={{ color: "var(--text-muted)" }}>
-        Solo los productos <Badge>activo</Badge> y publicados en catálogo aparecen en
-        catalogo.panaprice.com.
+        Los cambios de acá se reflejan en el catálogo público al instante, sin volver a desplegar nada.
       </p>
+      {error && <p style={{ color: "#f87171" }}>{error}</p>}
       <table className="tabla">
         <thead>
           <tr>
+            <th>Código</th>
             <th>Nombre</th>
             <th>Categoría</th>
             <th>Precio base</th>
-            <th>Estado</th>
             <th>Catálogo</th>
+            <th>Disponibilidad</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
           {productos.map((p) => (
             <tr key={p.id}>
+              <td>{p.codigo}</td>
               <td>{p.nombre}</td>
               <td>
                 <Badge>{p.categoria}</Badge>
               </td>
               <td>${Number(p.precioBase).toFixed(2)}</td>
-              <td>{p.activo ? "Activo" : "Inactivo"}</td>
               <td>{p.publicadoCatalogo ? "Publicado" : "Oculto"}</td>
+              <td>{p.disponible ? "Disponible" : "Agotado"}</td>
+              <td style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                <Link to={`/productos/${p.id}/editar`}>Editar</Link>
+                <button onClick={() => alternarPublicado(p)} disabled={procesandoId === p.id}>
+                  {p.publicadoCatalogo ? "Ocultar" : "Publicar"}
+                </button>
+                <button onClick={() => alternarDisponible(p)} disabled={procesandoId === p.id}>
+                  {p.disponible ? "Marcar agotado" : "Marcar disponible"}
+                </button>
+                <button onClick={() => eliminar(p)} disabled={procesandoId === p.id} className="btn-danger">
+                  Eliminar
+                </button>
+              </td>
             </tr>
           ))}
           {productos.length === 0 && (
             <tr>
-              <td colSpan={5}>No hay productos todavía.</td>
+              <td colSpan={7}>No hay productos todavía.</td>
             </tr>
           )}
         </tbody>

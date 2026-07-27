@@ -1,19 +1,15 @@
--- Migración manual — REVISAR antes de correr en Supabase (SQL editor del
--- proyecto, o `psql`). NO se ejecutó automáticamente: este schema es la
--- fuente de verdad compartida por varias empresas del grupo (ver cabecera
--- de schema.prisma), así que cualquier cambio estructural se aplica a mano
--- y con revisión, nunca con `prisma migrate dev` / `db push` directo.
+-- Migración manual — aplicada directamente vía conexión de servicio el
+-- 2026-07-27 (ver [[db-migration-safety]] en memoria del asistente para el
+-- porqué de este archivo en vez de `prisma migrate dev`). Puramente
+-- aditiva: crea 4 tablas nuevas y no modifica ninguna existente.
 --
--- Después de correr esto, actualizar Prisma Client localmente con:
---   npx prisma generate
--- (no hace falta `migrate dev`: las tablas ya existirán en la BD real).
---
--- Agrega 4 tablas nuevas para el catálogo público + solicitudes de pedido.
--- No modifica ni una sola tabla existente.
+-- Después de correr esto: `npx prisma generate` (no hace falta `migrate dev`,
+-- las tablas ya existen).
 
 CREATE TABLE productos (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id          uuid NOT NULL REFERENCES empresas(id),
+  codigo              text NOT NULL,
   nombre              text NOT NULL,
   categoria           text NOT NULL,
   descripcion         text,
@@ -21,9 +17,11 @@ CREATE TABLE productos (
   precio_base         numeric(10, 2) NOT NULL,
   activo              boolean NOT NULL DEFAULT true,
   publicado_catalogo  boolean NOT NULL DEFAULT false,
+  disponible          boolean NOT NULL DEFAULT true,
   creado_en           timestamptz NOT NULL DEFAULT now(),
   actualizado_en      timestamptz NOT NULL DEFAULT now(),
-  eliminado_en        timestamptz
+  eliminado_en        timestamptz,
+  CONSTRAINT uq_producto_empresa_codigo UNIQUE (empresa_id, codigo)
 );
 
 CREATE INDEX idx_productos_empresa_publicado ON productos (empresa_id, publicado_catalogo, activo);
@@ -65,3 +63,35 @@ CREATE TABLE solicitud_pedido_items (
 );
 
 CREATE INDEX idx_spi_solicitud ON solicitud_pedido_items (solicitud_id);
+
+-- Storage: bucket público para las imágenes del catálogo. Público = las
+-- fotos se sirven por URL directa sin necesitar el JWT del cliente (así
+-- catalogo.panaprice.com, que no tiene sesión, puede mostrarlas).
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('productos-catalogo', 'productos-catalogo', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Cualquier usuario autenticado del ERP (de cualquier empresa del grupo,
+-- ver nota de deuda técnica) puede subir/reemplazar/borrar imágenes en este
+-- bucket. No se separa por empresa todavía — alcance mínimo para hoy.
+CREATE POLICY "productos_catalogo_insert_auth" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'productos-catalogo');
+
+CREATE POLICY "productos_catalogo_update_auth" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (bucket_id = 'productos-catalogo')
+  WITH CHECK (bucket_id = 'productos-catalogo');
+
+CREATE POLICY "productos_catalogo_delete_auth" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (bucket_id = 'productos-catalogo');
+
+CREATE POLICY "productos_catalogo_select_public" ON storage.objects
+  FOR SELECT TO public
+  USING (bucket_id = 'productos-catalogo');
+
+-- Corré esto último (o Supabase ya lo muestra al ejecutar todo el bloque):
+-- copiá el "id" de la fila de tu empresa, es el valor de CATALOGO_EMPRESA_ID
+-- en server/.env.
+SELECT id, nombre FROM empresas;

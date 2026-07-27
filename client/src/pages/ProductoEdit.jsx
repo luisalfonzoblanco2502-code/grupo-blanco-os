@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { ImagenProductoUpload } from "../components/ImagenProductoUpload";
@@ -7,9 +7,11 @@ import { ImagenProductoUpload } from "../components/ImagenProductoUpload";
 const ESCALON_VACIO = { cantidadMinima: "", precioUnitario: "" };
 const CATEGORIAS = ["Pañoletas", "Pareos", "T-shirts", "Jerseys", "Otra"];
 
-export function ProductoNew() {
+export function ProductoEdit() {
+  const { id } = useParams();
   const navigate = useNavigate();
   const { perfil } = useAuth();
+  const [cargando, setCargando] = useState(true);
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
   const [categoria, setCategoria] = useState(CATEGORIAS[0]);
@@ -21,6 +23,31 @@ export function ProductoNew() {
   const [escalones, setEscalones] = useState([{ ...ESCALON_VACIO }]);
   const [error, setError] = useState(null);
   const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    api
+      .getProducto(id)
+      .then((p) => {
+        setCodigo(p.codigo);
+        setNombre(p.nombre);
+        setCategoria(CATEGORIAS.includes(p.categoria) ? p.categoria : "Otra");
+        setDescripcion(p.descripcion ?? "");
+        setImagenUrl(p.imagenUrl ?? "");
+        setPrecioBase(String(p.precioBase));
+        setPublicadoCatalogo(p.publicadoCatalogo);
+        setDisponible(p.disponible);
+        setEscalones(
+          p.preciosVolumen.length > 0
+            ? p.preciosVolumen.map((e) => ({
+                cantidadMinima: String(e.cantidadMinima),
+                precioUnitario: String(e.precioUnitario),
+              }))
+            : [{ ...ESCALON_VACIO }]
+        );
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setCargando(false));
+  }, [id]);
 
   function actualizarEscalon(index, cambios) {
     setEscalones((prev) => prev.map((e, i) => (i === index ? { ...e, ...cambios } : e)));
@@ -38,18 +65,18 @@ export function ProductoNew() {
           precioUnitario: Number(esc.precioUnitario),
         }));
 
-      const producto = await api.createProducto({
+      await api.updateProducto(id, {
         codigo,
         nombre,
         categoria,
-        descripcion: descripcion || undefined,
-        imagenUrl: imagenUrl || undefined,
+        descripcion: descripcion || null,
+        imagenUrl: imagenUrl || null,
         precioBase: Number(precioBase),
         publicadoCatalogo,
         disponible,
         preciosVolumen,
       });
-      navigate(`/productos`, { state: { creado: producto.id } });
+      navigate("/productos");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -57,9 +84,11 @@ export function ProductoNew() {
     }
   }
 
+  if (cargando) return <p>Cargando...</p>;
+
   return (
     <div>
-      <h1>Nuevo producto</h1>
+      <h1>Editar producto</h1>
       <form onSubmit={handleSubmit} className="form">
         <label>
           Código (ej. PAN-001)
@@ -84,7 +113,7 @@ export function ProductoNew() {
           <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={3} />
         </label>
         <label>
-          Imagen
+          Imagen (elegí un archivo solo si querés reemplazarla)
           <ImagenProductoUpload empresaId={perfil.empresa.id} imagenUrl={imagenUrl} onChange={setImagenUrl} />
         </label>
         <label>
@@ -140,7 +169,7 @@ export function ProductoNew() {
         {error && <p style={{ color: "#f87171" }}>{error}</p>}
 
         <button type="submit" className="btn-primary" disabled={enviando}>
-          {enviando ? "Guardando..." : "Guardar y publicar"}
+          {enviando ? "Guardando..." : "Guardar cambios"}
         </button>
       </form>
     </div>

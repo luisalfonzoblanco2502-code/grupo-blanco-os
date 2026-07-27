@@ -10,7 +10,10 @@ const INCLUDE_PRECIOS = {
   preciosVolumen: { orderBy: { cantidadMinima: "asc" } },
 };
 
-function validarDatosProducto({ nombre, categoria, precioBase }) {
+function validarDatosProducto({ codigo, nombre, categoria, precioBase }) {
+  if (!codigo || !String(codigo).trim()) {
+    throw new ValidacionError("El código del producto es obligatorio");
+  }
   if (!nombre || !String(nombre).trim()) {
     throw new ValidacionError("El nombre del producto es obligatorio");
   }
@@ -62,6 +65,7 @@ export async function obtenerProducto(productoId, empresaId) {
 
 export async function crearProducto({
   empresaId,
+  codigo,
   nombre,
   categoria,
   descripcion,
@@ -69,36 +73,49 @@ export async function crearProducto({
   precioBase,
   activo,
   publicadoCatalogo,
+  disponible,
   preciosVolumen,
 }) {
-  validarDatosProducto({ nombre, categoria, precioBase });
+  validarDatosProducto({ codigo, nombre, categoria, precioBase });
   validarPreciosVolumen(preciosVolumen);
 
-  return prisma.producto.create({
-    data: {
-      empresaId,
-      nombre: nombre.trim(),
-      categoria: categoria.trim(),
-      descripcion: descripcion?.trim() || null,
-      imagenUrl: imagenUrl?.trim() || null,
-      precioBase,
-      activo: activo ?? true,
-      publicadoCatalogo: publicadoCatalogo ?? false,
-      preciosVolumen: {
-        create: (preciosVolumen ?? []).map((e) => ({
-          cantidadMinima: e.cantidadMinima,
-          precioUnitario: e.precioUnitario,
-        })),
+  try {
+    return await prisma.producto.create({
+      data: {
+        empresaId,
+        codigo: codigo.trim(),
+        nombre: nombre.trim(),
+        categoria: categoria.trim(),
+        descripcion: descripcion?.trim() || null,
+        imagenUrl: imagenUrl?.trim() || null,
+        precioBase,
+        activo: activo ?? true,
+        publicadoCatalogo: publicadoCatalogo ?? false,
+        disponible: disponible ?? true,
+        preciosVolumen: {
+          create: (preciosVolumen ?? []).map((e) => ({
+            cantidadMinima: e.cantidadMinima,
+            precioUnitario: e.precioUnitario,
+          })),
+        },
       },
-    },
-    include: INCLUDE_PRECIOS,
-  });
+      include: INCLUDE_PRECIOS,
+    });
+  } catch (err) {
+    // P2002: choca con @@unique([empresaId, codigo]) — mensaje claro en vez
+    // del error crudo de Prisma.
+    if (err.code === "P2002") {
+      throw new ValidacionError(`Ya existe un producto con el código "${codigo}"`);
+    }
+    throw err;
+  }
 }
 
 export async function editarProducto(productoId, empresaId, cambios) {
   await obtenerProducto(productoId, empresaId);
 
   const datos = {
+    codigo: cambios.codigo?.trim(),
     nombre: cambios.nombre?.trim(),
     categoria: cambios.categoria?.trim(),
     descripcion: cambios.descripcion !== undefined ? cambios.descripcion?.trim() || null : undefined,
@@ -106,12 +123,14 @@ export async function editarProducto(productoId, empresaId, cambios) {
     precioBase: cambios.precioBase,
     activo: cambios.activo,
     publicadoCatalogo: cambios.publicadoCatalogo,
+    disponible: cambios.disponible,
   };
   Object.keys(datos).forEach((k) => datos[k] === undefined && delete datos[k]);
 
-  if (datos.nombre !== undefined || datos.categoria !== undefined || datos.precioBase !== undefined) {
+  if (datos.codigo !== undefined || datos.nombre !== undefined || datos.categoria !== undefined || datos.precioBase !== undefined) {
     const actual = await prisma.producto.findUnique({ where: { id: productoId } });
     validarDatosProducto({
+      codigo: datos.codigo ?? actual.codigo,
       nombre: datos.nombre ?? actual.nombre,
       categoria: datos.categoria ?? actual.categoria,
       precioBase: datos.precioBase ?? actual.precioBase,
@@ -121,32 +140,39 @@ export async function editarProducto(productoId, empresaId, cambios) {
     validarPreciosVolumen(cambios.preciosVolumen);
   }
 
-  return prisma.$transaction(async (tx) => {
-    if (cambios.preciosVolumen !== undefined) {
-      // Estrategia "reemplazar todo": más simple que hacer diff línea a
-      // línea y suficiente para el volumen de escalones de un producto.
-      await tx.productoPrecioVolumen.deleteMany({ where: { productoId } });
-    }
+  try {
+    return await prisma.$transaction(async (tx) => {
+      if (cambios.preciosVolumen !== undefined) {
+        // Estrategia "reemplazar todo": más simple que hacer diff línea a
+        // línea y suficiente para el volumen de escalones de un producto.
+        await tx.productoPrecioVolumen.deleteMany({ where: { productoId } });
+      }
 
-    return tx.producto.update({
-      where: { id: productoId },
-      data: {
-        ...datos,
-        actualizadoEn: new Date(),
-        ...(cambios.preciosVolumen !== undefined
-          ? {
-              preciosVolumen: {
-                create: cambios.preciosVolumen.map((e) => ({
-                  cantidadMinima: e.cantidadMinima,
-                  precioUnitario: e.precioUnitario,
-                })),
-              },
-            }
-          : {}),
-      },
-      include: INCLUDE_PRECIOS,
+      return tx.producto.update({
+        where: { id: productoId },
+        data: {
+          ...datos,
+          actualizadoEn: new Date(),
+          ...(cambios.preciosVolumen !== undefined
+            ? {
+                preciosVolumen: {
+                  create: cambios.preciosVolumen.map((e) => ({
+                    cantidadMinima: e.cantidadMinima,
+                    precioUnitario: e.precioUnitario,
+                  })),
+                },
+              }
+            : {}),
+        },
+        include: INCLUDE_PRECIOS,
+      });
     });
-  });
+  } catch (err) {
+    if (err.code === "P2002") {
+      throw new ValidacionError(`Ya existe un producto con el código "${datos.codigo}"`);
+    }
+    throw err;
+  }
 }
 
 export async function eliminarProducto(productoId, empresaId) {

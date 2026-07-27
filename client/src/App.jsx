@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useNavigate } from "react-router-dom";
+import { Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
 import { Dashboard } from "./pages/Dashboard";
 import { PedidosList } from "./pages/PedidosList";
 import { PedidoDetail } from "./pages/PedidoDetail";
@@ -8,6 +8,7 @@ import { OrdenesProduccionList } from "./pages/OrdenesProduccionList";
 import { OrdenProduccionDetail } from "./pages/OrdenProduccionDetail";
 import { ProductosList } from "./pages/ProductosList";
 import { ProductoNew } from "./pages/ProductoNew";
+import { ProductoEdit } from "./pages/ProductoEdit";
 import { SolicitudesList } from "./pages/SolicitudesList";
 import { SolicitudDetail } from "./pages/SolicitudDetail";
 import { Login } from "./pages/Login";
@@ -28,17 +29,34 @@ function Cabecera() {
       <h2>Grupo Blanco OS</h2>
       {session && (
         <nav style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <Link to="/">Dashboard</Link>
-          <Link to="/pedidos">Pedidos</Link>
-          <Link to="/ordenes">Órdenes de producción</Link>
-          <Link to="/solicitudes">Solicitudes</Link>
-          <Link to="/productos">Productos</Link>
-          <span style={{ color: "var(--text-muted)" }}>{perfil?.nombre ?? session.user.email}</span>
+          {perfil?.rol?.permisos?.ver_dashboard_ejecutivo && <Link to="/">Centro de Control</Link>}
+          {perfil?.rol?.permisos?.ver_pedidos && <Link to="/pedidos">Pedidos</Link>}
+          <Link to="/ordenes">
+            {perfil?.rol?.permisos?.ver_todas_las_ordenes ? "Órdenes de producción" : "Mis órdenes"}
+          </Link>
+          {/* Solicitudes/Productos ocultos temporalmente: la migración de esas
+              tablas todavía no está aplicada en la base real (RC2) — sin
+              esto, cualquiera que entre se encuentra un error 500. */}
+          <span style={{ color: "var(--text-muted)" }}>
+            {perfil?.nombre ?? session.user.email}
+            {perfil?.rol?.nombre ? ` (${perfil.rol.nombre})` : ""}
+          </span>
           <button onClick={handleSignOut}>Cerrar sesión</button>
         </nav>
       )}
     </header>
   );
+}
+
+function Inicio() {
+  const { perfil } = useAuth();
+  // OPERADOR no tiene ver_dashboard_ejecutivo: en vez de mostrarle un
+  // Dashboard que el backend le va a rechazar, lo mandamos directo a su
+  // vista de uso diario.
+  if (perfil && !perfil.rol?.permisos?.ver_dashboard_ejecutivo) {
+    return <Navigate to="/ordenes" replace />;
+  }
+  return <Dashboard />;
 }
 
 export default function App() {
@@ -52,7 +70,7 @@ export default function App() {
             path="/"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <Inicio />
               </ProtectedRoute>
             }
           />
@@ -133,6 +151,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ProductoNew />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/productos/:id/editar"
+            element={
+              <ProtectedRoute>
+                <ProductoEdit />
               </ProtectedRoute>
             }
           />

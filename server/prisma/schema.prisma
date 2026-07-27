@@ -273,6 +273,11 @@ model Producto {
   id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   empresaId         String    @map("empresa_id") @db.Uuid
   empresa           Empresa   @relation(fields: [empresaId], references: [id])
+  /// Código legible que ve el cliente en el catálogo y en el mensaje de
+  /// WhatsApp (ej. "PAN-001"). Lo escribe quien carga el producto desde el
+  /// ERP — no es autogenerado como pedId/opId porque acá el negocio quiere
+  /// controlar su propia numeración de diseños.
+  codigo            String
   nombre            String
   /// Texto libre por ahora (ej. "panoleta", "pareo") — mismo criterio que
   /// OrdenProduccion.tipoTrabajo: no existe todavía una tabla de categorías.
@@ -284,6 +289,10 @@ model Producto {
   precioBase        Decimal   @map("precio_base") @db.Decimal(10, 2)
   activo            Boolean   @default(true)
   publicadoCatalogo Boolean   @default(false) @map("publicado_catalogo")
+  /// Independiente de activo/publicadoCatalogo: un producto puede seguir
+  /// visible en catálogo pero marcado "agotado" (disponible=false) en vez
+  /// de desaparecer del todo.
+  disponible        Boolean   @default(true)
   creadoEn          DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
   actualizadoEn     DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
   eliminadoEn       DateTime? @map("eliminado_en") @db.Timestamptz(6)
@@ -291,6 +300,7 @@ model Producto {
   preciosVolumen ProductoPrecioVolumen[]
   solicitudItems SolicitudPedidoItem[]
 
+  @@unique([empresaId, codigo])
   @@index([empresaId, publicadoCatalogo, activo])
   @@map("productos")
 }

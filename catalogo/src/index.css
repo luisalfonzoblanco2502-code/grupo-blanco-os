@@ -106,6 +106,10 @@ body {
   font-family: "Courier New", monospace;
 }
 
+.badge-agotado {
+  color: var(--error);
+}
+
 .producto-info h3 {
   margin: 0;
 }
