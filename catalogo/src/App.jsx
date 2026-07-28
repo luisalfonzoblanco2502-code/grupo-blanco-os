@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getProductos, intentarCrearSolicitudEnERP, armarLinkWhatsApp } from "./api";
+import { getProductos, intentarCrearSolicitudEnERP, armarLinkWhatsApp, armarLinkWhatsAppGenerico } from "./api";
 
 // Mismo criterio que precioUnitarioParaCantidad en
 // server/src/services/productos.service.js: el escalón de mayor
@@ -14,12 +14,60 @@ function precioUnitario(producto, cantidad) {
   return aplicable ? Number(aplicable.precioUnitario) : Number(producto.precioBase);
 }
 
+// Logo real opcional: si catalogo/public/logo-panaprice.png existe, se usa;
+// si no (o falla la carga), cae a un wordmark de texto con el mismo
+// espíritu que el logo de marca (PANAPRICE en negro + CUSTOM en azul).
+// Poner el archivo ahí lo activa sin tocar código.
+function LogoPanaprice() {
+  const [error, setError] = useState(false);
+  if (error) {
+    return (
+      <div className="logo-texto" aria-label="PanaPrice Custom">
+        <span className="logo-principal">PANAPRICE</span>
+        <span className="logo-secundario">— CUSTOM —</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src="/logo-panaprice.png"
+      alt="PanaPrice Custom"
+      className="logo-imagen"
+      onError={() => setError(true)}
+    />
+  );
+}
+
+function IconoWhatsApp() {
+  return (
+    <svg viewBox="0 0 32 32" width="28" height="28" fill="currentColor" aria-hidden="true">
+      <path d="M16.04 3C9.02 3 3.32 8.7 3.32 15.72c0 2.27.6 4.44 1.72 6.36L3 29l7.13-1.98a12.6 12.6 0 0 0 5.9 1.5h.01c7.02 0 12.72-5.7 12.72-12.72C28.77 8.78 23.06 3 16.04 3Zm0 23.3h-.01a10.5 10.5 0 0 1-5.35-1.47l-.38-.23-4.23 1.17 1.13-4.13-.25-.42a10.47 10.47 0 0 1-1.6-5.6c0-5.8 4.72-10.52 10.53-10.52 2.81 0 5.45 1.1 7.44 3.09a10.44 10.44 0 0 1 3.08 7.44c0 5.8-4.72 10.52-10.36 10.52Zm5.77-7.88c-.32-.16-1.87-.92-2.16-1.03-.29-.1-.5-.16-.71.16-.21.32-.82 1.03-1 1.24-.19.21-.37.24-.69.08-.32-.16-1.34-.49-2.55-1.57-.94-.84-1.58-1.87-1.76-2.19-.19-.32-.02-.49.14-.65.14-.14.32-.37.48-.55.16-.19.21-.32.32-.53.11-.21.05-.4-.03-.55-.08-.16-.71-1.71-.97-2.34-.26-.62-.52-.53-.71-.54-.18-.01-.4-.01-.61-.01-.21 0-.55.08-.84.4-.29.32-1.1 1.08-1.1 2.63 0 1.55 1.13 3.05 1.29 3.26.16.21 2.22 3.39 5.38 4.75.75.32 1.34.51 1.79.66.75.24 1.44.2 1.98.13.6-.09 1.87-.76 2.14-1.5.26-.74.26-1.37.18-1.5-.08-.13-.29-.21-.61-.37Z" />
+    </svg>
+  );
+}
+
+function BotonWhatsAppFlotante() {
+  const link = armarLinkWhatsAppGenerico();
+  if (!link) return null;
+  return (
+    <a className="whatsapp-flotante" href={link} target="_blank" rel="noreferrer" aria-label="Consultar por WhatsApp">
+      <IconoWhatsApp />
+    </a>
+  );
+}
+
 function ProductoCard({ producto, onAgregar }) {
   const agotado = producto.disponible === false;
+  const [imagenRota, setImagenRota] = useState(false);
   return (
     <div className="producto-card">
-      {producto.imagenUrl ? (
-        <img src={producto.imagenUrl} alt={producto.nombre} loading="lazy" />
+      {producto.imagenUrl && !imagenRota ? (
+        <img
+          src={producto.imagenUrl}
+          alt={producto.nombre}
+          loading="lazy"
+          onError={() => setImagenRota(true)}
+        />
       ) : (
         <div className="producto-imagen-vacia" aria-hidden="true" />
       )}
@@ -123,7 +171,7 @@ export function App() {
     return (
       <div className="pagina">
         <header className="cabecera">
-          <h1>PanaPrice</h1>
+          <LogoPanaprice />
         </header>
         <main className="confirmacion">
           <h2>¡Pedido listo!</h2>
@@ -145,6 +193,7 @@ export function App() {
             <p className="nota-tecnica">(Nota interna: no se pudo registrar automáticamente en el sistema — {avisoErp.motivo}. El pedido por WhatsApp sigue siendo válido.)</p>
           )}
         </main>
+        <BotonWhatsAppFlotante />
       </div>
     );
   }
@@ -152,7 +201,15 @@ export function App() {
   return (
     <div className="pagina">
       <header className="cabecera">
-        <h1>PanaPrice</h1>
+        <div className="cabecera-marca">
+          <LogoPanaprice />
+          {vista === "catalogo" && (
+            <div className="cabecera-textos">
+              <h1>Catálogo de Pañoletas Personalizadas</h1>
+              <p className="subtitulo">Diseños exclusivos, sublimado premium — elegí tu diseño y cantidad.</p>
+            </div>
+          )}
+        </div>
         <button className="btn-carrito" onClick={() => setVista(vista === "checkout" ? "catalogo" : "checkout")}>
           Carrito ({cantidadTotal}) · ${total.toFixed(2)}
         </button>
@@ -238,6 +295,7 @@ export function App() {
           )}
         </main>
       )}
+      <BotonWhatsAppFlotante />
     </div>
   );
 }

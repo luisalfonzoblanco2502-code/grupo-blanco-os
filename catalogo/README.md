@@ -21,47 +21,24 @@ npm run dev   # http://localhost:5173 (o el siguiente puerto libre)
 
 ## Cómo agregar / editar productos (modo local, sin tocar Supabase)
 
-Editar `src/data/productos.js` — es un array plano, cada producto es un objeto:
+Editar `src/data/productos.js` — un array plano, 4 datos por producto, nada de código:
 
 ```js
-{
-  id: "local-5",
-  codigo: "PAN-005",
-  nombre: "Pañoleta Nuevo Diseño",
-  categoria: "panoleta",
-  descripcion: "...",
-  imagenUrl: "/productos/panoleta-005.jpg", // o null
-  precioBase: 8.5,
-  activo: true,
-  publicadoCatalogo: true,
-  preciosVolumen: [{ id: "v1", cantidadMinima: 12, precioUnitario: 7.5 }],
-}
+{ codigo: "PAN-007", nombre: "Pañoleta Flores", precio: 9.5, imagen: "pan-007.jpg" }
 ```
 
-Guardar, `git add`/`commit`, y volver a desplegar (`vercel --prod` desde esta
-carpeta, o `git push` si el proyecto está conectado a Vercel/Netlify por
-Git). **El enlace público no cambia** — cada redeploy actualiza el mismo
-dominio.
+- `precio`: número sin símbolo (ej. `8.5`).
+- `imagen`: nombre EXACTO del archivo dentro de `catalogo/public/productos/`, o `null` si todavía no hay foto (se ve un recuadro vacío, nunca un ícono roto).
+
+Para agregar un diseño: copiar un bloque, pegarlo antes del `];` y completar los 4 datos. Para sacar uno: borrar su bloque. Guardar, `git add`/`commit`, y volver a desplegar (`vercel --prod` desde esta carpeta). **El enlace público no cambia** — cada redeploy actualiza el mismo dominio.
 
 ## Cómo agregar / cambiar imágenes
 
-Carpeta exacta: **`catalogo/public/productos/`**.
+Carpeta exacta: **`catalogo/public/productos/`**. El nombre del archivo tiene que ser idéntico al que pusiste en el campo `imagen` de ese producto en `productos.js` (mayúsculas/minúsculas incluidas). Si usás `.png` en vez de `.jpg`, el nombre en `imagen` tiene que terminar en `.png` también.
 
-Los 6 diseños de la plantilla ya esperan un archivo con este nombre exacto:
+## Logo de marca
 
-| Código | Archivo esperado |
-|---|---|
-| PAN-001 | `pan-001.jpg` |
-| PAN-002 | `pan-002.jpg` |
-| PAN-003 | `pan-003.jpg` |
-| PAN-004 | `pan-004.jpg` |
-| PAN-005 | `pan-005.jpg` |
-| PAN-006 | `pan-006.jpg` |
-
-1. Poner el archivo con ESE nombre en `catalogo/public/productos/`.
-2. Si usás `.png` en vez de `.jpg`, cambiar la extensión en `imagenUrl` dentro de `src/data/productos.js` para ese producto.
-3. Si un diseño todavía no tiene foto, dejar `imagenUrl: null` — se muestra un recuadro vacío, no un ícono roto.
-4. Para un 7mo diseño en adelante: copiar un bloque en `productos.js`, ponerle `codigo: "PAN-007"` y usar `pan-007.jpg` como nombre de archivo.
+Poner el archivo del logo en **`catalogo/public/logo-panaprice.png`** — aparece solo en el encabezado, sin tocar código. Mientras no exista ese archivo, se muestra un wordmark de texto ("PANAPRICE — CUSTOM —") como respaldo automático.
 
 ## Desplegar (Vercel, sin repositorio Git remoto)
 
@@ -109,13 +86,13 @@ CNAME) que da Vercel.
   intento best-effort de registrar la solicitud en el ERP la manda dentro
   de `notasPersonalizacion` (ver `handleEnviarPedido` en `src/App.jsx`).
   Si se decide que ubicación merece su propio campo, agregarlo al modelo.
-- **El registro en el ERP es best-effort y no bloqueante a propósito.**
-  Mientras las tablas nuevas no estén migradas en Supabase (ver
-  `server/prisma/migrations_manual/0001_catalogo_solicitudes.sql`), ese
-  intento siempre va a fallar en silencio — el pedido por WhatsApp es la
-  única vía garantizada hasta que se aplique esa migración y se configure
-  `CATALOGO_EMPRESA_ID` en el backend.
-- **No se corrió QA visual automatizada** (no había Chromium/Playwright
-  disponible en el entorno de desarrollo al momento de este lanzamiento).
-  Se verificó build de producción limpio y smoke test del dev server;
-  falta abrir el link real desde un celular para confirmar visualmente.
+- **El registro en el ERP es best-effort y no bloqueante a propósito.** Las
+  tablas de Supabase ya están migradas y `CATALOGO_EMPRESA_ID` configurado,
+  pero el backend (`server/`) todavía no está desplegado públicamente
+  (pausado a propósito el 2026-07-27 para no bloquear el lanzamiento del
+  catálogo) — hasta que se despliegue, ese intento siempre falla en
+  silencio y el pedido por WhatsApp sigue siendo la única vía real.
+- **Verificado visualmente** (Playwright, desktop 1280px + mobile 390px,
+  sin errores de consola) el 2026-07-27 tras el pulido de diseño — grilla,
+  carrito, checkout y botón flotante de WhatsApp se ven y funcionan bien en
+  ambos tamaños.

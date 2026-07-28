@@ -44,16 +44,36 @@ function conCodigo(producto) {
   return { codigo: producto.id.slice(0, 8).toUpperCase(), ...producto };
 }
 
+// data/productos.js solo pide 4 campos (codigo, nombre, precio, imagen) —
+// acá se completa el resto con defaults fijos para que el resto de la app
+// (que espera el shape completo, igual al de la API real) no tenga que
+// saber que está en modo local.
+function normalizarProductoLocal(p) {
+  return {
+    id: p.codigo,
+    codigo: p.codigo,
+    nombre: p.nombre,
+    categoria: "Pañoletas",
+    descripcion: null,
+    imagenUrl: p.imagen ? `/productos/${p.imagen}` : null,
+    precioBase: p.precio,
+    activo: true,
+    publicadoCatalogo: true,
+    disponible: p.disponible ?? true,
+    preciosVolumen: p.preciosVolumen ?? [],
+  };
+}
+
 export async function getProductos() {
   if (DATA_SOURCE === "local") {
-    return productosLocal;
+    return productosLocal.map(normalizarProductoLocal);
   }
   try {
     const productos = await fetchConTimeout("/publico/productos");
     return productos.map(conCodigo);
   } catch (err) {
     console.warn("No se pudo cargar el catálogo desde la API, usando datos locales:", err.message);
-    return productosLocal;
+    return productosLocal.map(normalizarProductoLocal);
   }
 }
 
@@ -106,5 +126,14 @@ export function armarLinkWhatsApp({ cliente, lineas, total }) {
     `Total estimado: $${total.toFixed(2)}`,
   ].join("\n");
 
+  return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+}
+
+// Link genérico para el botón flotante de "consultar por WhatsApp" (antes
+// de armar un pedido) — mismo número, mensaje de saludo simple.
+export function armarLinkWhatsAppGenerico() {
+  const numero = soloDigitos(import.meta.env.VITE_WHATSAPP_NUMERO);
+  if (!numero) return null;
+  const mensaje = "Hola, quiero información sobre el catálogo de pañoletas PanaPrice";
   return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
 }
