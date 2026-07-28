@@ -31,8 +31,16 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
+}
+
+#grilla-productos {
+  scroll-margin-top: 5rem;
 }
 
 .pagina {
@@ -91,29 +99,6 @@ body {
   color: var(--acento);
 }
 
-.cabecera-textos {
-  min-width: 0;
-}
-
-.cabecera-textos h1 {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cabecera-textos .subtitulo {
-  margin: 0.1rem 0 0;
-  font-size: 0.82rem;
-  color: var(--texto-suave);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .btn-carrito {
   font: inherit;
   padding: 0.5rem 1.1rem;
@@ -126,6 +111,164 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* Hero superior */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.6rem;
+  padding: 2.5rem 1rem 2.75rem;
+  margin: 0 0 2rem;
+  border-radius: 20px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--acento) 8%, var(--superficie)) 0%, var(--superficie) 100%);
+  border: 1px solid var(--borde);
+}
+
+.hero .logo-imagen-grande {
+  height: 60px;
+  margin-bottom: 0.5rem;
+}
+
+.hero .logo-texto-grande .logo-principal {
+  font-size: 1.8rem;
+}
+
+.hero .logo-texto-grande {
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+.hero-titulo {
+  margin: 0;
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  max-width: 28rem;
+}
+
+.hero-subtitulo {
+  margin: 0;
+  color: var(--texto-suave);
+  font-size: 1rem;
+  max-width: 30rem;
+}
+
+.hero-botones {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hero-botones .btn-primary {
+  margin-top: 0;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-secundario {
+  font: inherit;
+  padding: 0.6rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid var(--acento);
+  background: transparent;
+  color: var(--acento);
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-block;
+  transition: background 0.15s ease;
+}
+
+.btn-secundario:hover {
+  background: color-mix(in srgb, var(--acento) 10%, transparent);
+}
+
+/* Barra de beneficios */
+.barra-beneficios {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  padding: 1rem;
+  margin: 0 0 2rem;
+  border-radius: 14px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+}
+
+.barra-beneficios li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  justify-content: center;
+  text-align: center;
+}
+
+.beneficio-check {
+  color: var(--acento);
+  font-weight: 800;
+}
+
+/* Categorías + buscador */
+.controles-catalogo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.barra-categorias {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.chip {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--texto-suave);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.chip:hover {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+.chip-activo,
+.chip-activo:hover {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--acento-texto);
+}
+
+.buscador {
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.buscador input {
+  width: 100%;
 }
 
 .grilla-productos {
@@ -150,16 +293,50 @@ body {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
 }
 
+.producto-imagen-wrap {
+  position: relative;
+}
+
 .producto-card img,
 .producto-imagen-vacia {
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
   background: var(--borde);
+  display: block;
+}
+
+.badge-categoria {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  background: color-mix(in srgb, var(--superficie) 85%, transparent);
+  color: var(--texto);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  backdrop-filter: blur(3px);
+}
+
+.badge-agotado-card {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  background: var(--error);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
 }
 
 .producto-info {
-  padding: 1rem;
+  padding: 1.1rem 1.1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -174,12 +351,9 @@ body {
   font-family: "Courier New", monospace;
 }
 
-.badge-agotado {
-  color: var(--error);
-}
-
 .producto-info h3 {
   margin: 0;
+  font-size: 1.05rem;
 }
 
 .producto-descripcion {
@@ -189,8 +363,10 @@ body {
 }
 
 .producto-precio {
-  font-weight: 700;
-  margin: 0.25rem 0 0;
+  font-weight: 800;
+  font-size: 1.15rem;
+  margin: 0.3rem 0 0;
+  color: var(--texto);
 }
 
 .producto-volumen {
@@ -350,14 +526,6 @@ textarea {
     gap: 0.6rem;
   }
 
-  .cabecera-textos h1 {
-    white-space: normal;
-  }
-
-  .cabecera-textos .subtitulo {
-    white-space: normal;
-  }
-
   .btn-carrito {
     width: 100%;
   }
@@ -367,6 +535,43 @@ textarea {
     bottom: 1rem;
     width: 52px;
     height: 52px;
+  }
+
+  .hero {
+    padding: 1.75rem 1rem 2rem;
+  }
+
+  .hero-titulo {
+    font-size: 1.4rem;
+  }
+
+  .hero-subtitulo {
+    font-size: 0.9rem;
+  }
+
+  .hero-botones {
+    flex-direction: column;
+    align-self: stretch;
+    width: 100%;
+  }
+
+  .hero-botones .btn-primary,
+  .hero-botones .btn-secundario {
+    width: 100%;
+    text-align: center;
+  }
+
+  .controles-catalogo {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .buscador {
+    max-width: none;
+  }
+
+  .barra-beneficios {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .linea-controles {

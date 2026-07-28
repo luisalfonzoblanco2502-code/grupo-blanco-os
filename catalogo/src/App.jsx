@@ -18,11 +18,11 @@ function precioUnitario(producto, cantidad) {
 // si no (o falla la carga), cae a un wordmark de texto con el mismo
 // espíritu que el logo de marca (PANAPRICE en negro + CUSTOM en azul).
 // Poner el archivo ahí lo activa sin tocar código.
-function LogoPanaprice() {
+function LogoPanaprice({ grande = false }) {
   const [error, setError] = useState(false);
   if (error) {
     return (
-      <div className="logo-texto" aria-label="PanaPrice Custom">
+      <div className={grande ? "logo-texto logo-texto-grande" : "logo-texto"} aria-label="PanaPrice Custom">
         <span className="logo-principal">PANAPRICE</span>
         <span className="logo-secundario">— CUSTOM —</span>
       </div>
@@ -32,7 +32,7 @@ function LogoPanaprice() {
     <img
       src="/logo-panaprice.png"
       alt="PanaPrice Custom"
-      className="logo-imagen"
+      className={grande ? "logo-imagen logo-imagen-grande" : "logo-imagen"}
       onError={() => setError(true)}
     />
   );
@@ -56,26 +56,112 @@ function BotonWhatsAppFlotante() {
   );
 }
 
+// Hero superior — solo presentación/CTAs, no toca datos ni carrito. "Ver
+// catálogo" es un ancla pura (#grilla-productos, scroll suave por CSS);
+// "Cotizar por WhatsApp" reutiliza el mismo link genérico del botón
+// flotante, no agrega ninguna integración nueva.
+function Hero() {
+  const linkWhatsApp = armarLinkWhatsAppGenerico();
+  return (
+    <section className="hero">
+      <LogoPanaprice grande />
+      <h1 className="hero-titulo">Catálogo de Pañoletas Personalizadas</h1>
+      <p className="hero-subtitulo">Seda importada • Personalización • Producción nacional</p>
+      <div className="hero-botones">
+        <a className="btn-primary" href="#grilla-productos">
+          Ver catálogo
+        </a>
+        {linkWhatsApp && (
+          <a className="btn-secundario" href={linkWhatsApp} target="_blank" rel="noreferrer">
+            Cotizar por WhatsApp
+          </a>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// Deriva las categorías directamente de los productos ya cargados (locales
+// o de la API, da igual) — no hardcodea una lista fija, así que el día que
+// el catálogo real tenga "Uniformes" o "DTF" aparecen solos, sin tocar
+// este componente.
+function BarraCategorias({ productos, categoriaActiva, onSeleccionar }) {
+  const categorias = useMemo(() => {
+    const unicas = [...new Set(productos.map((p) => p.categoria).filter(Boolean))];
+    return ["Todos", ...unicas];
+  }, [productos]);
+
+  if (categorias.length <= 1) return null;
+
+  return (
+    <nav className="barra-categorias" aria-label="Categorías">
+      {categorias.map((cat) => (
+        <button
+          key={cat}
+          className={cat === categoriaActiva ? "chip chip-activo" : "chip"}
+          onClick={() => onSeleccionar(cat)}
+        >
+          {cat.toUpperCase()}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function Buscador({ valor, onChange }) {
+  return (
+    <div className="buscador">
+      <input
+        type="search"
+        placeholder="Buscar por nombre, código o categoría..."
+        value={valor}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Buscar productos"
+      />
+    </div>
+  );
+}
+
+const BENEFICIOS = [
+  "Seda importada",
+  "Personalización",
+  "Producción nacional",
+  "Envíos nacionales",
+];
+
+function BarraBeneficios() {
+  return (
+    <ul className="barra-beneficios">
+      {BENEFICIOS.map((b) => (
+        <li key={b}>
+          <span className="beneficio-check" aria-hidden="true">✓</span> {b}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ProductoCard({ producto, onAgregar }) {
   const agotado = producto.disponible === false;
   const [imagenRota, setImagenRota] = useState(false);
   return (
     <div className="producto-card">
-      {producto.imagenUrl && !imagenRota ? (
-        <img
-          src={producto.imagenUrl}
-          alt={producto.nombre}
-          loading="lazy"
-          onError={() => setImagenRota(true)}
-        />
-      ) : (
-        <div className="producto-imagen-vacia" aria-hidden="true" />
-      )}
+      <div className="producto-imagen-wrap">
+        {producto.imagenUrl && !imagenRota ? (
+          <img
+            src={producto.imagenUrl}
+            alt={producto.nombre}
+            loading="lazy"
+            onError={() => setImagenRota(true)}
+          />
+        ) : (
+          <div className="producto-imagen-vacia" aria-hidden="true" />
+        )}
+        {producto.categoria && <span className="badge-categoria">{producto.categoria}</span>}
+        {agotado && <span className="badge-agotado-card">Agotado</span>}
+      </div>
       <div className="producto-info">
-        <span className="producto-codigo">
-          {producto.codigo}
-          {agotado && <span className="badge-agotado"> · Agotado</span>}
-        </span>
+        <span className="producto-codigo">{producto.codigo}</span>
         <h3>{producto.nombre}</h3>
         {producto.descripcion && <p className="producto-descripcion">{producto.descripcion}</p>}
         <p className="producto-precio">desde ${Number(producto.precioBase).toFixed(2)}</p>
@@ -105,12 +191,29 @@ export function App() {
   const [enviando, setEnviando] = useState(false);
   const [linkWhatsApp, setLinkWhatsApp] = useState(null);
   const [avisoErp, setAvisoErp] = useState(null);
+  const [categoriaActiva, setCategoriaActiva] = useState("Todos");
+  const [busqueda, setBusqueda] = useState("");
 
   useEffect(() => {
     getProductos()
       .then(setProductos)
       .finally(() => setCargando(false));
   }, []);
+
+  // Buscador + barra de categorías: puramente client-side sobre lo que ya
+  // trajo getProductos() — no dispara ninguna consulta nueva.
+  const productosFiltrados = useMemo(() => {
+    const texto = busqueda.trim().toLowerCase();
+    return productos.filter((p) => {
+      const coincideCategoria = categoriaActiva === "Todos" || p.categoria === categoriaActiva;
+      const coincideBusqueda =
+        !texto ||
+        p.nombre?.toLowerCase().includes(texto) ||
+        p.codigo?.toLowerCase().includes(texto) ||
+        p.categoria?.toLowerCase().includes(texto);
+      return coincideCategoria && coincideBusqueda;
+    });
+  }, [productos, categoriaActiva, busqueda]);
 
   function agregarAlCarrito(producto) {
     setCarrito((prev) => [
@@ -203,12 +306,6 @@ export function App() {
       <header className="cabecera">
         <div className="cabecera-marca">
           <LogoPanaprice />
-          {vista === "catalogo" && (
-            <div className="cabecera-textos">
-              <h1>Catálogo de Pañoletas Personalizadas</h1>
-              <p className="subtitulo">Diseños exclusivos, sublimado premium — elegí tu diseño y cantidad.</p>
-            </div>
-          )}
         </div>
         <button className="btn-carrito" onClick={() => setVista(vista === "checkout" ? "catalogo" : "checkout")}>
           Carrito ({cantidadTotal}) · ${total.toFixed(2)}
@@ -217,13 +314,26 @@ export function App() {
 
       {vista === "catalogo" && (
         <main>
+          <Hero />
+          <BarraBeneficios />
+          <div className="controles-catalogo">
+            <BarraCategorias
+              productos={productos}
+              categoriaActiva={categoriaActiva}
+              onSeleccionar={setCategoriaActiva}
+            />
+            <Buscador valor={busqueda} onChange={setBusqueda} />
+          </div>
           {cargando && <p>Cargando catálogo...</p>}
-          <div className="grilla-productos">
-            {productos.map((p) => (
+          <div className="grilla-productos" id="grilla-productos">
+            {productosFiltrados.map((p) => (
               <ProductoCard key={p.id} producto={p} onAgregar={agregarAlCarrito} />
             ))}
           </div>
           {!cargando && productos.length === 0 && <p>Todavía no hay productos publicados en el catálogo.</p>}
+          {!cargando && productos.length > 0 && productosFiltrados.length === 0 && (
+            <p>Ningún producto coincide con la búsqueda.</p>
+          )}
         </main>
       )}
 
