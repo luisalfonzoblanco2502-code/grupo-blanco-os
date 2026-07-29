@@ -230,11 +230,13 @@ body {
 /* ---------------------------------------------------------------------- */
 .hero {
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
+  grid-template-columns: 1fr 1fr;
   align-items: center;
-  gap: 2.5rem;
+  gap: 3rem;
   padding: 3.5rem 0 4rem;
-  margin: 0 0 1rem;
+  /* Mucho aire antes de "¿Por qué Panaprice?" — que la foto respire antes
+     de entrar a la siguiente sección (pedido explícito de diseño). */
+  margin: 0 0 4.5rem;
 }
 
 .hero-titulo {
@@ -276,17 +278,25 @@ body {
   flex-wrap: wrap;
 }
 
+/* Sin fondo ni proporción forzada a propósito: si la foto todavía no
+   existe, esto queda vacío (nada de caja gris/placeholder) — y con foto,
+   nunca se recorta ni se deforma, sea cual sea su relación de aspecto
+   real (ver .hero-foto). */
 .hero-imagen-wrap {
-  border-radius: 20px;
-  overflow: hidden;
-  background: var(--gris-claro);
-  aspect-ratio: 4 / 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+/* object-fit: contain a propósito — la foto (moda/modelo) nunca se corta
+   ni se estira; esquinas suaves porque sí mejoran el encaje visual, sin
+   ningún filtro/degradado/oscurecido ni texto encima. */
 .hero-foto {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  max-height: 640px;
+  object-fit: contain;
+  border-radius: 20px;
   display: block;
 }
 
@@ -294,9 +304,8 @@ body {
 /* "¿Por qué Panaprice?"                                                   */
 /* ---------------------------------------------------------------------- */
 .seccion-porque {
-  padding: 3rem 0;
-  margin: 0 0 1rem;
-  border-top: 1px solid var(--borde);
+  padding: 0 0 3rem;
+  margin: 0;
   text-align: center;
 }
 
@@ -817,11 +826,13 @@ textarea:focus {
     grid-template-columns: 1fr;
     padding: 2rem 0 2.5rem;
     gap: 1.75rem;
+    margin-bottom: 3rem;
   }
 
-  .hero-imagen-wrap {
-    order: -1;
-    aspect-ratio: 16 / 10;
+  /* En móvil el mensaje va primero y la foto después — orden natural del
+     JSX (hero-texto, después hero-imagen-wrap), sin "order" que lo altere. */
+  .hero-foto {
+    max-height: 480px;
   }
 
   .hero-titulo {

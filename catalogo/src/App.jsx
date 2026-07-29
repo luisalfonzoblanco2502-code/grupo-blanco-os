@@ -103,14 +103,16 @@ function BotonWhatsAppFlotante() {
 // Foto de producción opcional: mismo patrón que LogoPanaprice — si
 // catalogo/public/hero-produccion.jpg no existe todavía, el hero se apoya
 // solo en tipografía/espacio (nunca un fondo decorativo de relleno). Poner
-// el archivo ahí la activa sin tocar código.
+// el archivo ahí la activa sin tocar código. object-fit: contain a
+// propósito (ver index.css) — nunca recorta la foto, sea cual sea su
+// proporción real.
 function FotoHero() {
   const [error, setError] = useState(false);
   if (error) return null;
   return (
     <img
       src="/hero-produccion.jpg"
-      alt="Producción textil personalizada en planta Panaprice"
+      alt="Modelo luciendo una pañoleta personalizada Panaprice"
       className="hero-foto"
       onError={() => setError(true)}
     />
