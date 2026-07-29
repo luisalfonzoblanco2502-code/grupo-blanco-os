@@ -368,13 +368,23 @@ body {
   margin: 0;
 }
 
-/* Precio: el elemento más llamativo de la tarjeta después de la foto. */
+/* Precio: el elemento más llamativo de la tarjeta después de la foto.
+   Se recalcula según la cantidad elegida en el selector (ver
+   selector-cantidad más abajo) — por eso NO dice "desde": es el precio
+   real aplicable a lo que el cliente está por agregar. */
 .producto-precio {
   font-weight: 800;
   font-size: 1.7rem;
   letter-spacing: -0.01em;
   margin: 0.4rem 0 0;
   color: var(--acento);
+}
+
+.precio-sufijo {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  margin-left: 0.1rem;
 }
 
 /* Precios por volumen presentados como beneficios (chips con check), no
@@ -400,6 +410,62 @@ body {
 .producto-volumen li::before {
   content: "✓ ";
   font-weight: 800;
+}
+
+/* Selector de cantidad: botones grandes (44px, mínimo táctil recomendado),
+   número solo de lectura entre medio — evita a propósito un <input> editable
+   para que no exista ningún campo de texto que dispare el zoom automático
+   de iOS al enfocarse. */
+.selector-cantidad {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+
+.selector-cantidad button {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--texto);
+  font-size: 1.3rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  touch-action: manipulation;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.selector-cantidad button:hover:not(:disabled) {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+.selector-cantidad button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cantidad-valor {
+  min-width: 2.25rem;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.producto-subtotal {
+  margin: 0.5rem 0 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--texto-suave);
 }
 
 .btn-primary {

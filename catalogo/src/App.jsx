@@ -144,6 +144,24 @@ function BarraBeneficios() {
 function ProductoCard({ producto, onAgregar }) {
   const agotado = producto.disponible === false;
   const [imagenRota, setImagenRota] = useState(false);
+  const [cantidad, setCantidad] = useState(1);
+
+  const unitario = precioUnitario(producto, cantidad);
+  const subtotal = unitario * cantidad;
+
+  function restar() {
+    setCantidad((c) => Math.max(1, c - 1));
+  }
+
+  function sumar() {
+    setCantidad((c) => c + 1);
+  }
+
+  function handleAgregar() {
+    onAgregar(producto, cantidad);
+    setCantidad(1);
+  }
+
   return (
     <div className="producto-card">
       <div className="producto-imagen-wrap">
@@ -164,7 +182,10 @@ function ProductoCard({ producto, onAgregar }) {
         <span className="producto-codigo">{producto.codigo}</span>
         <h3>{producto.nombre}</h3>
         {producto.descripcion && <p className="producto-descripcion">{producto.descripcion}</p>}
-        <p className="producto-precio">desde ${Number(producto.precioBase).toFixed(2)}</p>
+        <p className="producto-precio">
+          ${unitario.toFixed(2)}
+          <span className="precio-sufijo"> c/u</span>
+        </p>
         {producto.preciosVolumen?.length > 0 && (
           <ul className="producto-volumen">
             {producto.preciosVolumen.map((e) => (
@@ -174,7 +195,19 @@ function ProductoCard({ producto, onAgregar }) {
             ))}
           </ul>
         )}
-        <button className="btn-primary" onClick={() => onAgregar(producto)} disabled={agotado}>
+
+        <div className="selector-cantidad">
+          <button type="button" onClick={restar} disabled={agotado || cantidad <= 1} aria-label="Restar unidad">
+            −
+          </button>
+          <span className="cantidad-valor">{cantidad}</span>
+          <button type="button" onClick={sumar} disabled={agotado} aria-label="Sumar unidad">
+            +
+          </button>
+        </div>
+        <p className="producto-subtotal">Subtotal: ${subtotal.toFixed(2)}</p>
+
+        <button className="btn-primary" onClick={handleAgregar} disabled={agotado}>
           {agotado ? "Agotado" : "Agregar al pedido"}
         </button>
       </div>
@@ -215,11 +248,19 @@ export function App() {
     });
   }, [productos, categoriaActiva, busqueda]);
 
-  function agregarAlCarrito(producto) {
-    setCarrito((prev) => [
-      ...prev,
-      { clave: `${producto.id}-${prev.length}-${Date.now()}`, producto, cantidad: 1, disenoNotas: "" },
-    ]);
+  // Si el producto ya está en el carrito, suma a esa línea en vez de crear
+  // una duplicada — un mismo diseño con distintas cantidades agregadas
+  // desde la tarjeta siempre queda como una sola línea.
+  function agregarAlCarrito(producto, cantidad) {
+    setCarrito((prev) => {
+      const existente = prev.find((l) => l.producto.id === producto.id);
+      if (existente) {
+        return prev.map((l) =>
+          l.clave === existente.clave ? { ...l, cantidad: l.cantidad + cantidad } : l
+        );
+      }
+      return [...prev, { clave: `${producto.id}-${Date.now()}`, producto, cantidad, disenoNotas: "" }];
+    });
   }
 
   function actualizarLinea(clave, cambios) {
