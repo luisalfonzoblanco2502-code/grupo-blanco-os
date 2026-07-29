@@ -115,14 +115,18 @@ function soloDigitos(texto) {
   return String(texto || "").replace(/\D/g, "");
 }
 
-// Mensaje corto — la Orden Comercial en PDF ya lleva TODO el detalle (ver
-// pdf.js), así que el texto de WhatsApp solo tiene que confirmar que el
-// pedido se generó y dar el número. Copy exacto pedido por el negocio
-// (sprint "experiencia de compra", 2026-07-29).
-function mensajeCorto(numeroOrden) {
-  return ["Hola Panaprice.", "Acabo de generar mi pedido.", "", `Orden: ${numeroOrden}`, "", "Adjunto el PDF con toda la información.", "Muchas gracias."].join(
-    "\n"
-  );
+// Mensaje corto — dos variantes, ninguna miente sobre si hay un archivo
+// realmente adjunto (sprint correctivo, 2026-07-29 — antes una sola frase
+// decía "adjunto el PDF" incluso cuando no viajaba ningún archivo):
+//  - compartido=true:  se usa como texto de navigator.share({ text }),
+//    donde el PDF SÍ viaja adjunto de verdad (lo entrega el share sheet
+//    del sistema operativo) — "te comparto" es cierto acá.
+//  - compartido=false: el PDF se descargó al dispositivo pero no se pudo
+//    compartir como archivo (navegador/SO sin soporte) — el cliente lo
+//    adjunta a mano, así que nunca dice "adjunto".
+function mensajeCorto(numeroOrden, compartido) {
+  const lineaPdf = compartido ? "Te comparto el PDF de mi pedido." : "Te envío el PDF de mi pedido a continuación.";
+  return ["Hola Panaprice.", "Acabo de generar mi pedido.", "", `Orden: ${numeroOrden}`, "", lineaPdf, "Muchas gracias."].join("\n");
 }
 
 // Fallback con el detalle completo — se usa SOLO si el PDF no se pudo
@@ -165,16 +169,24 @@ function mensajeDetallado({ cliente, lineas, total, resumenCategorias, numeroOrd
   ].join("\n");
 }
 
-// Arma el link wa.me con el pedido ya redactado — el cliente solo tiene que
-// tocar "Enviar" en WhatsApp. Si VITE_WHATSAPP_NUMERO no está configurado,
-// devuelve null (App.jsx lo maneja mostrando un aviso en vez de romper).
-// pdfOk decide la plantilla: corta (confía en el PDF adjunto) o detallada
-// (fallback honesto si el PDF no se generó).
+// Único lugar que decide QUÉ texto corresponde — usado por armarLinkWhatsApp
+// (fallback sin compartir archivo), por "Copiar mensaje" y por
+// handleCompartirPedido en App.jsx (texto de navigator.share). Así los tres
+// lugares nunca pueden desincronizarse sobre qué es honesto decir.
+export function textoMensajePedido({ cliente, lineas, total, resumenCategorias, numeroOrden, pdfOk, compartido = false }) {
+  if (!pdfOk) return mensajeDetallado({ cliente, lineas, total, resumenCategorias, numeroOrden });
+  return mensajeCorto(numeroOrden, compartido);
+}
+
+// Arma el link wa.me — usado en los caminos donde NO hubo navigator.share
+// (fallback de descarga manual, o PDF que ni se pudo generar). Si
+// VITE_WHATSAPP_NUMERO no está configurado, devuelve null (App.jsx lo
+// maneja mostrando un aviso en vez de romper).
 export function armarLinkWhatsApp({ cliente, lineas, total, resumenCategorias = [], numeroOrden, pdfOk }) {
   const numero = soloDigitos(import.meta.env.VITE_WHATSAPP_NUMERO);
   if (!numero) return null;
 
-  const mensaje = pdfOk ? mensajeCorto(numeroOrden) : mensajeDetallado({ cliente, lineas, total, resumenCategorias, numeroOrden });
+  const mensaje = textoMensajePedido({ cliente, lineas, total, resumenCategorias, numeroOrden, pdfOk, compartido: false });
 
   return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
 }

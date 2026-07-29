@@ -5,6 +5,7 @@ import {
   armarLinkWhatsApp,
   armarLinkWhatsAppGenerico,
   consultarRastreo,
+  textoMensajePedido,
 } from "./api";
 
 // Vive acá (no en pdf.js) a propósito: pdf.js importa jsPDF, una librería
@@ -163,12 +164,37 @@ function FotoHero() {
   );
 }
 
-// Hero superior — solo presentación/CTAs, no toca datos ni carrito. "Ver
-// catálogo" es un ancla pura (#grilla-productos, scroll suave por CSS);
-// "Cotizar por WhatsApp" reutiliza el mismo link genérico del botón
-// flotante, no agrega ninguna integración nueva.
+// Navegación superior: 3 anclas puras (<a href="#id"> + scroll-behavior:
+// smooth global, sin JS de scroll propio). Va inmediatamente DESPUÉS del
+// Hero (orden aprobado: Header → Hero → Navegación → Beneficios →
+// Catálogo) — es la ÚNICA navegación rápida del catálogo ahora: el Hero ya
+// no tiene sus propios botones ("Ver catálogo"/"Cotizar por WhatsApp"),
+// que quedaban duplicados con esto (sprint de simplificación de UX,
+// 2026-07-29). Cotizar por WhatsApp lo sigue cubriendo el botón flotante
+// durante toda la navegación, sin duplicar acá. "Personaliza tus diseños"
+// es el acceso prioritario (estilo relleno) — el resto, secundario.
+function NavegacionPrincipal() {
+  return (
+    <nav className="nav-principal" aria-label="Accesos principales">
+      <a href="#grilla-productos" className="nav-principal-item nav-principal-secundario">
+        📦 Ver catálogo
+      </a>
+      <a href="#personaliza-tus-disenos" className="nav-principal-item nav-principal-prioritario">
+        🎨 Personaliza tus diseños
+      </a>
+      <a href="#rastreo" className="nav-principal-item nav-principal-secundario">
+        📍 Rastrea tu pedido
+      </a>
+    </nav>
+  );
+}
+
+// Hero superior — limpio a propósito (solo logo/título/subtítulo/
+// descripción): sus botones se eliminaron porque quedaban duplicados con
+// NavegacionPrincipal, que ahora es la única navegación rápida del
+// catálogo (sprint de simplificación de UX). "Cotizar por WhatsApp" sigue
+// disponible todo el recorrido vía el botón flotante (BotonWhatsAppFlotante).
 function Hero() {
-  const linkWhatsApp = armarLinkWhatsAppGenerico();
   return (
     <section className="hero">
       <div className="hero-texto">
@@ -179,16 +205,6 @@ function Hero() {
         </h1>
         <p className="hero-subtitulo">Producción personalizada desde una unidad.</p>
         <p className="hero-categorias">Pañoletas · Franelas · Chemises · Merchandising</p>
-        <div className="hero-botones">
-          <a className="btn-hero" href="#grilla-productos">
-            Ver catálogo
-          </a>
-          {linkWhatsApp && (
-            <a className="btn-secundario" href={linkWhatsApp} target="_blank" rel="noreferrer">
-              Cotizar por WhatsApp
-            </a>
-          )}
-        </div>
       </div>
       <div className="hero-imagen-wrap">
         <FotoHero />
@@ -675,6 +691,10 @@ function ProductoCard({ producto, onAgregar, acumuladoCategoriaActual, tarifaAbi
   const subtotal = unitarioSubtotal * cantidad;
 
   const escala = escalaParaMostrar(producto);
+  // Mejor precio posible de ESTA MISMA escala (la que ya alimenta la tabla
+  // "Ver precios por cantidad") — nunca un valor fijo/inventado. Si el
+  // producto no tiene escala (else de arriba), esto simplemente no se usa.
+  const mejorPrecio = escala ? escala[escala.length - 1].precioUnitario : null;
 
   function restar() {
     setCantidad((c) => Math.max(1, c - 1));
@@ -725,13 +745,29 @@ function ProductoCard({ producto, onAgregar, acumuladoCategoriaActual, tarifaAbi
                 agregar acá (mismo cálculo que el Subtotal de abajo). Por
                 eso el cliente ve el precio bajar en TODAS las tarjetas de
                 Pañoletas apenas el carrito cruza un escalón, sin tener que
-                entrar al carrito — el incentivo central de este sprint. */}
+                entrar al carrito. Sin "Desde": esta cifra YA es el precio
+                real para la cantidad acumulada actual, no un piso teórico. */}
             <p className="producto-precio">
-              Desde ${unitarioSubtotal.toFixed(2)}
+              ${unitarioSubtotal.toFixed(2)}
               <span className="precio-sufijo"> c/u</span>
             </p>
+            {/* Gancho comercial: el mejor precio de la MISMA escala que ya
+                alimenta la tabla de abajo (nunca un número inventado). Si
+                todavía hay un precio mejor por desbloquear, se muestra ese
+                número; si el carrito ya llegó al mejor escalón, la línea no
+                desaparece — pasa a confirmar que ya se aplicó el mejor
+                precio (refuerzo positivo en vez de un hueco vacío). */}
+            {mejorPrecio < unitarioSubtotal ? (
+              <p className="producto-precio-volumen">
+                Por volumen, desde ${mejorPrecio.toFixed(2)} c/u
+              </p>
+            ) : (
+              <p className="producto-precio-volumen producto-precio-volumen-alcanzado">
+                Mejor precio por volumen aplicado
+              </p>
+            )}
             <button type="button" className="link-tarifas" onClick={onToggleTarifa} aria-expanded={tarifaAbierta}>
-              Ver tabla de producción {tarifaAbierta ? "▲" : "▼"}
+              Ver precios por cantidad {tarifaAbierta ? "▲" : "▼"}
             </button>
             {tarifaAbierta && (
               <table className="tabla-tarifas">
@@ -745,9 +781,9 @@ function ProductoCard({ producto, onAgregar, acumuladoCategoriaActual, tarifaAbi
                 <tbody>
                   {escala.map((e) => (
                     <tr key={e.cantidadMinima}>
-                      <td>{e.cantidadMinima}</td>
-                      <td>${(e.cantidadMinima * e.precioUnitario).toFixed(2)}</td>
-                      <td>${e.precioUnitario.toFixed(2)}</td>
+                      <td data-label="Cantidad">{e.cantidadMinima}</td>
+                      <td data-label="Total">${(e.cantidadMinima * e.precioUnitario).toFixed(2)}</td>
+                      <td data-label="Precio unitario">${e.precioUnitario.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -796,11 +832,19 @@ export function App() {
   const [cliente, setCliente] = useState({ nombre: "", telefono: "", ubicacion: "", tipoEntrega: "" });
   const [enviando, setEnviando] = useState(false);
   const [pasoEnvio, setPasoEnvio] = useState(null);
-  const [linkWhatsApp, setLinkWhatsApp] = useState(null);
   const [avisoErp, setAvisoErp] = useState(null);
   const [numeroOrden, setNumeroOrden] = useState(null);
   const [numeroOrdenRastreable, setNumeroOrdenRastreable] = useState(false);
   const [pdfInfo, setPdfInfo] = useState(null);
+  // El blob vive en memoria (no se descarga solo) hasta que el cliente
+  // toca el botón de la pantalla "Tu orden está lista" — recién ahí se
+  // decide compartirlo de verdad o descargarlo, según lo que el
+  // dispositivo permita (ver handleCompartirPedido/handleDescargarPedido).
+  const [pdfBlob, setPdfBlob] = useState(null);
+  const [nombreArchivoPdf, setNombreArchivoPdf] = useState(null);
+  // null = todavía no se intentó compartir/descargar; luego { ok, motivo? }.
+  const [resultadoEnvio, setResultadoEnvio] = useState(null);
+  const [mensajeCopiado, setMensajeCopiado] = useState(false);
   const [categoriaActiva, setCategoriaActiva] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
   // Solo una tarjeta puede tener la tabla de tarifas abierta a la vez —
@@ -951,23 +995,19 @@ export function App() {
       .filter(Boolean);
   }, [carrito]);
 
-  // Orden pedida por el negocio: generar PDF, guardar borrador (que es lo
-  // mismo que generar el número de orden real: ambos pasan en la MISMA
-  // llamada a intentarCrearSolicitudEnERP), abrir WhatsApp. Como eso son
-  // dos `await` antes de tener el link final, y un popup solo se libra del
-  // bloqueador si `window.open` pasa DENTRO del gesto síncrono del click,
-  // la pestaña se abre en blanco ACÁ y recién se navega al final
-  // (`ventana.location`) — patrón estándar para popups después de una
-  // operación async. El catálogo NUNCA debe quedar bloqueado por un error
-  // de conexión: si el guardado falla, se sigue con un número de
-  // referencia local (ver numeroOrdenLocal) y el pedido por WhatsApp sale
-  // igual, solo que ese número no será consultable en "Rastrea tu pedido".
+  // Ya NO abre WhatsApp acá — solo guarda el pedido (número real si el ERP
+  // responde) y genera el PDF en memoria (blob). Compartirlo o descargarlo
+  // pasa a un botón propio en la pantalla de confirmación: navigator.share
+  // con archivos necesita un gesto de usuario FRESCO, y llamarlo acá
+  // (después de dos `await`) es frágil sobre todo en Safari — ver
+  // handleCompartirPedido/handleDescargarPedido. El catálogo NUNCA debe
+  // quedar bloqueado por un error de conexión: si el guardado falla, se
+  // sigue con un número de referencia local (ver numeroOrdenLocal), solo
+  // que ese número no será consultable en "Rastrea tu pedido".
   async function handleEnviarPedido(e) {
     e.preventDefault();
     setEnviando(true);
     setPasoEnvio("Guardando tu pedido...");
-
-    const ventana = window.open("", "_blank");
 
     // crearSolicitudPublica exige productoId real de catálogo — los
     // diseños personalizados todavía no se sincronizan al ERP (ver nota en
@@ -1000,10 +1040,9 @@ export function App() {
     setNumeroOrdenRastreable(ordenEsReal);
 
     setPasoEnvio("Generando tu Orden Comercial en PDF...");
-    let pdfOk = false;
     try {
       const { generarPdfPedido } = await import("./pdf");
-      const nombreArchivo = await generarPdfPedido({
+      const { blob, nombreArchivo } = await generarPdfPedido({
         cliente,
         lineas: lineasConSubtotal,
         resumenCategorias,
@@ -1011,26 +1050,109 @@ export function App() {
         numeroOrden: ordenFinal,
         tipoEntrega: cliente.tipoEntrega,
       });
+      setPdfBlob(blob);
+      setNombreArchivoPdf(nombreArchivo);
       setPdfInfo({ ok: true, nombreArchivo });
-      pdfOk = true;
     } catch (err) {
       setPdfInfo({ ok: false, motivo: err.message });
-    }
-
-    setPasoEnvio("Abriendo WhatsApp...");
-    const link = armarLinkWhatsApp({ cliente, lineas: lineasConSubtotal, total, resumenCategorias, numeroOrden: ordenFinal, pdfOk });
-    setLinkWhatsApp(link);
-    if (link) {
-      if (ventana) ventana.location.href = link;
-      else window.open(link, "_blank");
-    } else if (ventana) {
-      ventana.close();
     }
 
     setVista("confirmacion");
     setEnviando(false);
     setPasoEnvio(null);
   }
+
+  // Se recalcula solo cuando cambia el PDF — evita reconstruir el File en
+  // cada render. navigator.canShare exige el objeto File real (no alcanza
+  // con mirar el tipo MIME a mano), por eso se construye acá.
+  const puedeCompartirArchivo = useMemo(() => {
+    if (!pdfBlob || !nombreArchivoPdf) return false;
+    if (typeof navigator === "undefined" || typeof navigator.canShare !== "function") return false;
+    try {
+      const archivo = new File([pdfBlob], nombreArchivoPdf, { type: "application/pdf" });
+      return navigator.canShare({ files: [archivo] });
+    } catch {
+      return false;
+    }
+  }, [pdfBlob, nombreArchivoPdf]);
+
+  // Camino real de compartir: el PDF viaja adjunto de verdad en el picker
+  // nativo del sistema operativo — acá "te comparto el PDF" (ver
+  // textoMensajePedido) es una promesa cierta, no como el mensaje viejo.
+  // Nunca asumimos que el cliente elige WhatsApp: el picker lo decide él.
+  async function handleCompartirPedido() {
+    const archivo = new File([pdfBlob], nombreArchivoPdf, { type: "application/pdf" });
+    const texto = textoMensajePedido({
+      cliente,
+      lineas: lineasConSubtotal,
+      total,
+      resumenCategorias,
+      numeroOrden,
+      pdfOk: true,
+      compartido: true,
+    });
+    try {
+      await navigator.share({ files: [archivo], title: "Orden Panaprice", text: texto });
+      setResultadoEnvio({ ok: true });
+    } catch (err) {
+      // El cliente cerró el picker sin elegir nada — no es un error real,
+      // no hay nada que avisar (podría volver a tocar el botón).
+      if (err?.name === "AbortError") return;
+      setResultadoEnvio({ ok: false, motivo: err.message });
+    }
+  }
+
+  // Fallback: descarga real del blob (no depende de que el navegador haya
+  // "guardado" nada antes) + abre WhatsApp con el mensaje que NO promete
+  // un adjunto que no existe. Clic directo del botón = gesto de usuario
+  // legítimo, ya no hace falta el truco de ventana en blanco.
+  function handleDescargarPedido() {
+    if (pdfBlob && nombreArchivoPdf) {
+      const url = URL.createObjectURL(pdfBlob);
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = nombreArchivoPdf;
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+    const link = armarLinkWhatsApp({
+      cliente,
+      lineas: lineasConSubtotal,
+      total,
+      resumenCategorias,
+      numeroOrden,
+      pdfOk: Boolean(pdfBlob),
+    });
+    if (link) window.open(link, "_blank");
+    setResultadoEnvio({ ok: true });
+  }
+
+  async function handleCopiarMensaje() {
+    const texto = textoMensajePedido({
+      cliente,
+      lineas: lineasConSubtotal,
+      total,
+      resumenCategorias,
+      numeroOrden,
+      pdfOk: Boolean(pdfBlob),
+      compartido: puedeCompartirArchivo,
+    });
+    try {
+      await navigator.clipboard.writeText(texto);
+      setMensajeCopiado(true);
+      setTimeout(() => setMensajeCopiado(false), 2000);
+    } catch {
+      // Sin permiso de portapapeles (poco común) — no rompe nada más.
+    }
+  }
+
+  // Solo hace falta si el PDF no se pudo generar en absoluto — ahí el
+  // único camino que queda es el mensaje detallado de siempre por wa.me.
+  const linkWhatsAppSinPdf = pdfInfo && !pdfInfo.ok
+    ? armarLinkWhatsApp({ cliente, lineas: lineasConSubtotal, total, resumenCategorias, numeroOrden, pdfOk: false })
+    : null;
 
   if (vista === "confirmacion") {
     return (
@@ -1039,32 +1161,69 @@ export function App() {
           <LogoPanaprice onClick={() => setVista("catalogo")} />
         </header>
         <main className="confirmacion">
-          <h2>¡Pedido listo!</h2>
+          <h2>Tu orden está lista</h2>
           {numeroOrden && (
             <p className="orden-numero">
               N.º de orden: <strong>{numeroOrden}</strong>
             </p>
           )}
-          <p>
-            Se abrió WhatsApp con tu pedido redactado — solo tenés que tocar <strong>Enviar</strong> en
-            la conversación para confirmarlo con nuestro equipo.
-          </p>
+
           {pdfInfo?.ok && (
+            <div className="accion-final">
+              {!resultadoEnvio &&
+                (puedeCompartirArchivo ? (
+                  <>
+                    <button type="button" className="btn-primary btn-accion-final" onClick={handleCompartirPedido}>
+                      Compartir pedido y PDF
+                    </button>
+                    <p className="ayuda-accion-final">Selecciona WhatsApp para enviarlo a Panaprice.</p>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" className="btn-primary btn-accion-final" onClick={handleDescargarPedido}>
+                      Descargar PDF y continuar por WhatsApp
+                    </button>
+                    <p className="ayuda-accion-final">Se descarga el archivo y se abre WhatsApp — adjuntalo ahí para completar tu pedido.</p>
+                  </>
+                ))}
+              {/* Siempre disponible, tomó o no la acción principal — útil si
+                  ya tiene WhatsApp Web abierto o si compartir falló. */}
+              <button type="button" className="link-copiar" onClick={handleCopiarMensaje}>
+                {mensajeCopiado ? "Mensaje copiado ✓" : "Copiar mensaje"}
+              </button>
+            </div>
+          )}
+
+          {pdfInfo?.ok && resultadoEnvio?.ok && (
             <p>
-              También se descargó tu pedido en PDF (<strong>{pdfInfo.nombreArchivo}</strong>) — adjuntalo en la
-              misma conversación de WhatsApp para que quede completo.
+              {puedeCompartirArchivo
+                ? "Se abrió el menú para compartir tu pedido — si elegiste WhatsApp, solo falta tocar enviar."
+                : "Se descargó tu PDF y se abrió WhatsApp — adjuntalo en la misma conversación para que tu pedido quede completo."}
             </p>
           )}
-          {linkWhatsApp ? (
-            <a className="btn-primary" href={linkWhatsApp} target="_blank" rel="noreferrer">
-              ¿No se abrió? Tocá acá para abrir WhatsApp
-            </a>
-          ) : (
-            <p className="error">
-              El catálogo todavía no tiene configurado el número de WhatsApp. Contactá a PanaPrice
-              directamente para confirmar tu pedido.
+
+          {resultadoEnvio && !resultadoEnvio.ok && (
+            <p className="nota-tecnica">
+              (No se pudo compartir automáticamente — {resultadoEnvio.motivo}. Probá "Copiar mensaje" y adjuntá el PDF descargado a mano.)
             </p>
           )}
+
+          {pdfInfo && !pdfInfo.ok && (
+            <>
+              <p className="error">No se pudo generar el PDF automáticamente ({pdfInfo.motivo}).</p>
+              {linkWhatsAppSinPdf ? (
+                <a className="btn-primary" href={linkWhatsAppSinPdf} target="_blank" rel="noreferrer">
+                  Abrir WhatsApp con el detalle de tu pedido
+                </a>
+              ) : (
+                <p className="error">
+                  El catálogo todavía no tiene configurado el número de WhatsApp. Contactá a PanaPrice
+                  directamente para confirmar tu pedido.
+                </p>
+              )}
+            </>
+          )}
+
           {numeroOrdenRastreable && (
             <button
               type="button"
@@ -1078,10 +1237,7 @@ export function App() {
             </button>
           )}
           {avisoErp && !avisoErp.ok && (
-            <p className="nota-tecnica">(Nota interna: no se pudo registrar automáticamente en el sistema — {avisoErp.motivo}. El pedido por WhatsApp sigue siendo válido.)</p>
-          )}
-          {pdfInfo && !pdfInfo.ok && (
-            <p className="nota-tecnica">(No se pudo generar el PDF automáticamente — {pdfInfo.motivo}. El pedido por WhatsApp sigue siendo válido.)</p>
+            <p className="nota-tecnica">(Nota interna: no se pudo registrar automáticamente en el sistema — {avisoErp.motivo}. Tu pedido sigue siendo válido.)</p>
           )}
         </main>
         <BotonWhatsAppFlotante />
@@ -1110,6 +1266,7 @@ export function App() {
       {vista === "catalogo" && (
         <main>
           <Hero />
+          <NavegacionPrincipal />
           <PorQuePanaprice />
           <div className="controles-catalogo">
             <BarraCategorias

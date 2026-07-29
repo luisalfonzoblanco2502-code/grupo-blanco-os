@@ -54,7 +54,9 @@ body {
   margin: 0;
 }
 
-#grilla-productos {
+#grilla-productos,
+#personaliza-tus-disenos,
+#rastreo {
   scroll-margin-top: 5rem;
 }
 
@@ -229,28 +231,9 @@ body {
   box-shadow: none;
 }
 
-/* Botón principal de marca (navegación, no venta): "Ver catálogo". */
-.btn-hero {
-  font: inherit;
-  padding: 0.8rem 1.6rem;
-  border-radius: 999px;
-  border: none;
-  background: var(--negro);
-  color: var(--blanco);
-  cursor: pointer;
-  font-weight: 600;
-  text-decoration: none;
-  display: inline-block;
-  transition: transform 0.18s ease, background 0.18s ease;
-}
-
-.btn-hero:hover {
-  background: var(--azul-oscuro);
-  transform: translateY(-1px);
-}
-
-/* Botón secundario: acción de venta (Cotizar), en contorno azul para no
-   competir visualmente con el botón principal (negro) del hero. */
+/* Botón secundario en contorno azul — usado hoy en "Rastrea tu pedido" de
+   la pantalla de confirmación. (El Hero ya no tiene botones propios: se
+   simplificó para no duplicar NavegacionPrincipal — ver Hero en App.jsx.) */
 .btn-secundario {
   font: inherit;
   padding: 0.78rem 1.6rem;
@@ -269,6 +252,50 @@ body {
   background: var(--azul);
   color: #ffffff;
   transform: translateY(-1px);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Navegación superior — 3 accesos, visibles sin scroll (punto 2 del       */
+/* sprint correctivo de experiencia). Mismo patrón de scroll horizontal    */
+/* que .barra-categorias como red de seguridad en mobile.                 */
+/* ---------------------------------------------------------------------- */
+.nav-principal {
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding: 0.1rem 0 1.25rem;
+}
+
+.nav-principal-item {
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.nav-principal-secundario {
+  background: var(--gris-claro);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+}
+
+.nav-principal-secundario:hover {
+  border-color: var(--azul);
+  color: var(--azul);
+}
+
+.nav-principal-prioritario {
+  background: var(--azul);
+  color: #ffffff;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--azul) 30%, transparent);
+}
+
+.nav-principal-prioritario:hover {
+  transform: translateY(-1px);
+  opacity: 0.94;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -315,13 +342,6 @@ body {
   font-size: 0.9rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-}
-
-.hero-botones {
-  display: flex;
-  gap: 0.85rem;
-  margin-top: 2rem;
-  flex-wrap: wrap;
 }
 
 /* Sin fondo ni proporción forzada a propósito: si la foto todavía no
@@ -764,6 +784,28 @@ body {
   }
 }
 
+/* Gancho comercial (punto 1 del sprint correctivo): más chico y suave que
+   el precio en vivo — es información de apoyo, no compite con el número
+   principal. */
+.producto-precio-volumen {
+  margin: 0.1rem 0 0;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+
+@media (min-width: 640px) {
+  .producto-precio-volumen {
+    font-size: 0.82rem;
+  }
+}
+
+/* Cuando el carrito ya alcanzó el mejor escalón — refuerzo positivo, no un
+   hueco vacío ni un número repetido. */
+.producto-precio-volumen-alcanzado {
+  color: var(--azul);
+}
+
 .precio-sufijo {
   font-size: 0.68rem;
   font-weight: 600;
@@ -802,39 +844,128 @@ body {
   }
 }
 
+/* Tabla de precios por cantidad — mobile-first "de verdad": en la base
+   (teléfono) cada fila se convierte en una tarjeta vertical (Cantidad /
+   Total / Precio unitario apilados, con su propia etiqueta vía
+   data-label), nunca una tabla angosta con scroll horizontal ni columnas
+   cortadas. A partir de 640px vuelve a ser una tabla clásica — mismo
+   markup <table>/<thead>/<tbody>, sin duplicar HTML: el <td data-label="…">
+   ya viene de ProductoCard, esto solo decide cómo se dibuja. */
 .tabla-tarifas {
   width: 100%;
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
   border-collapse: collapse;
-  margin-top: 0.4rem;
-  font-size: 0.66rem;
-  background: var(--gris-claro);
-  border-radius: 8px;
+}
+
+.tabla-tarifas thead {
+  /* Oculto visualmente en móvil (cada valor ya lleva su etiqueta al lado),
+     pero sigue accesible para lectores de pantalla. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.tabla-tarifas,
+.tabla-tarifas tbody,
+.tabla-tarifas tr,
+.tabla-tarifas td {
+  display: block;
+  width: 100%;
+}
+
+.tabla-tarifas tr {
+  background: var(--gris-claro);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.tabla-tarifas tr:last-child {
+  margin-bottom: 0;
+}
+
+.tabla-tarifas td {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.28rem 0;
+  text-align: right;
+}
+
+.tabla-tarifas td::before {
+  content: attr(data-label);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--texto-suave);
+  text-align: left;
+}
+
+.tabla-tarifas td:last-child {
+  font-weight: 800;
+  color: var(--azul);
 }
 
 @media (min-width: 640px) {
   .tabla-tarifas {
+    display: table;
+    background: var(--gris-claro);
+    border-radius: 8px;
+    overflow: hidden;
     font-size: 0.76rem;
   }
-}
 
-.tabla-tarifas th,
-.tabla-tarifas td {
-  padding: 0.25rem 0.35rem;
-  text-align: center;
-}
+  .tabla-tarifas thead {
+    display: table-header-group;
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
 
-.tabla-tarifas thead th {
-  font-size: 0.66rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--texto-suave);
-  border-bottom: 1px solid var(--borde);
-}
+  .tabla-tarifas tbody {
+    display: table-row-group;
+  }
 
-.tabla-tarifas tbody td:last-child {
-  font-weight: 700;
-  color: var(--azul);
+  .tabla-tarifas tr {
+    display: table-row;
+    background: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  .tabla-tarifas th,
+  .tabla-tarifas td {
+    display: table-cell;
+    width: auto;
+    padding: 0.25rem 0.35rem;
+    text-align: center;
+  }
+
+  .tabla-tarifas td::before {
+    content: none;
+  }
+
+  .tabla-tarifas thead th {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--texto-suave);
+    border-bottom: 1px solid var(--borde);
+  }
+
+  .tabla-tarifas tbody td:last-child {
+    font-weight: 700;
+    color: var(--azul);
+  }
 }
 
 /* Selector de cantidad: botones grandes (44px, mínimo táctil recomendado),
@@ -1237,6 +1368,43 @@ textarea:focus {
   display: inline-block;
 }
 
+/* Pantalla "Tu orden está lista" (sprint correctivo): un solo botón que se
+   adapta al dispositivo, nunca dos caminos ambiguos a la vez. */
+.accion-final {
+  margin: 1.75rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.btn-accion-final {
+  width: 100%;
+  max-width: 320px;
+  padding: 1rem 1.25rem;
+  font-size: 0.95rem;
+}
+
+.ayuda-accion-final {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+
+.link-copiar {
+  background: none;
+  border: none;
+  padding: 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--azul);
+  cursor: pointer;
+}
+
+.link-copiar:hover {
+  text-decoration: underline;
+}
+
 .nota-tecnica {
   font-size: 0.8rem;
   color: var(--texto-suave);
@@ -1293,18 +1461,6 @@ textarea:focus {
 
   .hero-subtitulo {
     font-size: 1rem;
-  }
-
-  .hero-botones {
-    flex-direction: column;
-    align-self: stretch;
-    width: 100%;
-  }
-
-  .hero-botones .btn-hero,
-  .hero-botones .btn-secundario {
-    width: 100%;
-    text-align: center;
   }
 
   .seccion-porque {

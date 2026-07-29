@@ -284,7 +284,13 @@ export async function generarPdfPedido({ cliente, lineas, resumenCategorias, tot
     { maxWidth: ANCHO_UTIL }
   );
 
+  // Ya NO se llama doc.save() acá — quien use esto (App.jsx) decide qué
+  // hacer con el documento: compartirlo de verdad vía navigator.share
+  // (Web Share API con archivos) si el dispositivo lo permite, o descargarlo
+  // como respaldo. Guardarlo automáticamente acá adentro le quitaba esa
+  // decisión al llamador (era la causa de que WhatsApp abriera diciendo
+  // "adjunto el PDF" sin ningún archivo realmente adjunto).
   const nombreArchivo = `ORDEN-COMERCIAL-${numeroOrden}.pdf`;
-  doc.save(nombreArchivo);
-  return nombreArchivo;
+  const blob = doc.output("blob");
+  return { blob, nombreArchivo };
 }
