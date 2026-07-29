@@ -14,6 +14,36 @@ function precioUnitario(producto, cantidad) {
   return aplicable ? Number(aplicable.precioUnitario) : Number(producto.precioBase);
 }
 
+// ============================================================================
+// DEMO TEMPORAL — el ERP todavía no manda el campo `badge` desde la API.
+// Este mapa (por código de producto) es solo para poder mostrar el diseño
+// de los badges mientras tanto. BORRAR este bloque completo (y la línea
+// `?? BADGES_DEMO[producto.codigo]` de abajo) el día que Producto tenga un
+// campo `badge` real y la API lo devuelva — en ese momento `producto.badge`
+// ya alcanza por sí solo, no hace falta ningún otro cambio acá.
+const BADGES_DEMO = {
+  "PA-001": "mas_vendido",
+};
+// ============================================================================
+
+const BADGE_CONFIG = {
+  nuevo: { emoji: "✨", texto: "NUEVO" },
+  tendencia: { emoji: "🔥", texto: "TENDENCIA" },
+  mas_vendido: { emoji: "⭐", texto: "MÁS VENDIDO" },
+  oferta: { emoji: "🎁", texto: "OFERTA" },
+  edicion_limitada: { emoji: "💎", texto: "EDICIÓN LIMITADA" },
+};
+
+function BadgeProducto({ tipo }) {
+  const config = BADGE_CONFIG[tipo];
+  if (!config) return null;
+  return (
+    <span className={`badge-producto badge-producto-${tipo}`}>
+      {config.emoji} {config.texto}
+    </span>
+  );
+}
+
 // Logo real opcional: si catalogo/public/logo-panaprice.png existe, se usa;
 // si no (o falla la carga), cae a un wordmark de texto con el mismo
 // espíritu que el logo de marca (PANAPRICE en negro + CUSTOM en azul).
@@ -162,6 +192,10 @@ function ProductoCard({ producto, onAgregar }) {
     setCantidad(1);
   }
 
+  // producto.badge es lo que mandaría la API el día de mañana; mientras
+  // tanto cae al mapa de demo de arriba (ver nota DEMO TEMPORAL).
+  const badge = producto.badge ?? BADGES_DEMO[producto.codigo] ?? null;
+
   return (
     <div className="producto-card">
       <div className="producto-imagen-wrap">
@@ -177,6 +211,11 @@ function ProductoCard({ producto, onAgregar }) {
         )}
         {producto.categoria && <span className="badge-categoria">{producto.categoria}</span>}
         {agotado && <span className="badge-agotado-card">Agotado</span>}
+        {badge && (
+          <span className="badge-esquina-inferior">
+            <BadgeProducto tipo={badge} />
+          </span>
+        )}
       </div>
       <div className="producto-info">
         <span className="producto-codigo">{producto.codigo}</span>
@@ -189,8 +228,10 @@ function ProductoCard({ producto, onAgregar }) {
         {producto.preciosVolumen?.length > 0 && (
           <ul className="producto-volumen">
             {producto.preciosVolumen.map((e) => (
-              <li key={e.id}>
-                {e.cantidadMinima}+ u. → ${Number(e.precioUnitario).toFixed(2)} c/u
+              <li key={e.id} className="volumen-item">
+                <span className="volumen-encabezado">🔥 Precio Mayorista</span>
+                <span className="volumen-condicion">{e.cantidadMinima}+ unidades</span>
+                <span className="volumen-precio">${Number(e.precioUnitario).toFixed(2)} c/u</span>
               </li>
             ))}
           </ul>

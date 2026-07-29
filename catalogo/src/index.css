@@ -337,11 +337,53 @@ body {
   border-radius: 999px;
 }
 
+/* Badge comercial (nuevo/tendencia/más vendido/oferta/edición limitada):
+   esquina inferior izquierda a propósito — así nunca choca con la
+   categoría (arriba-izquierda) ni con "Agotado" (arriba-derecha), y no
+   tapa el centro de la foto. */
+.badge-esquina-inferior {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+}
+
+.badge-producto {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+}
+
+.badge-producto-nuevo {
+  background: #2563eb;
+}
+
+.badge-producto-tendencia {
+  background: #ea580c;
+}
+
+.badge-producto-mas_vendido {
+  background: #b45309;
+}
+
+.badge-producto-oferta {
+  background: #16a34a;
+}
+
+.badge-producto-edicion_limitada {
+  background: #7c3aed;
+}
+
 .producto-info {
-  padding: 1.35rem 1.4rem 1.6rem;
+  padding: 1.1rem 1.25rem 1.35rem;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
 /* Código: presente pero discreto — la protagonista es la foto, después el
@@ -355,11 +397,11 @@ body {
 }
 
 .producto-info h3 {
-  margin: 0.15rem 0 0;
-  font-size: 1.3rem;
+  margin: 0.1rem 0 0;
+  font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.01em;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .producto-descripcion {
@@ -374,9 +416,9 @@ body {
    real aplicable a lo que el cliente está por agregar. */
 .producto-precio {
   font-weight: 800;
-  font-size: 1.7rem;
+  font-size: 1.6rem;
   letter-spacing: -0.01em;
-  margin: 0.4rem 0 0;
+  margin: 0.25rem 0 0;
   color: var(--acento);
 }
 
@@ -387,29 +429,44 @@ body {
   margin-left: 0.1rem;
 }
 
-/* Precios por volumen presentados como beneficios (chips con check), no
-   como una lista técnica de escalones. */
+/* Precio por volumen como beneficio comercial ("Precio Mayorista"), no
+   como una tabla técnica de escalones — misma información, otro marco. */
 .producto-volumen {
   list-style: none;
   padding: 0;
-  margin: 0.4rem 0 0;
+  margin: 0.3rem 0 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
-.producto-volumen li {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--acento);
+.volumen-item {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 0.4rem;
   background: color-mix(in srgb, var(--acento) 9%, transparent);
-  padding: 0.35rem 0.7rem;
+  padding: 0.4rem 0.7rem;
   border-radius: 8px;
 }
 
-.producto-volumen li::before {
-  content: "✓ ";
+.volumen-encabezado {
+  font-size: 0.78rem;
   font-weight: 800;
+  color: var(--acento);
+  flex-basis: 100%;
+}
+
+.volumen-condicion {
+  font-size: 0.75rem;
+  color: var(--texto-suave);
+  font-weight: 600;
+}
+
+.volumen-precio {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--acento);
 }
 
 /* Selector de cantidad: botones grandes (44px, mínimo táctil recomendado),
@@ -420,7 +477,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  margin-top: 0.85rem;
+  margin-top: 0.6rem;
 }
 
 .selector-cantidad button {
@@ -462,7 +519,7 @@ body {
 }
 
 .producto-subtotal {
-  margin: 0.5rem 0 0;
+  margin: 0.3rem 0 0;
   font-size: 0.88rem;
   font-weight: 700;
   color: var(--texto-suave);
@@ -495,8 +552,8 @@ body {
    escapa a otros usos de .btn-primary (hero, checkout, confirmación). */
 .producto-info .btn-primary {
   width: 100%;
-  margin-top: 0.75rem;
-  padding: 0.75rem 1.1rem;
+  margin-top: 0.55rem;
+  padding: 0.7rem 1.1rem;
   font-size: 0.95rem;
 }
 
