@@ -78,3 +78,55 @@ export function escalaParaMostrar(producto) {
   }
   return null;
 }
+
+// Mensajes de celebración al alcanzar exactamente un escalón — tono
+// elegante, nunca infantil ("excelente socio", no "genial!!! 🥳🥳").
+const CELEBRACION_POR_CANTIDAD = {
+  3: { emoji: "🎉", texto: "Excelente. Ya desbloqueaste la tarifa para 3 unidades." },
+  6: { emoji: "🚀", texto: "Ahora eres cliente mayorista." },
+  12: { emoji: "🤝", texto: "Excelente socio. Ya eres un aliado comercial de Panaprice." },
+  50: { emoji: "🏭", texto: "Producción comercial desbloqueada." },
+  100: { emoji: "🔥", texto: "Producción empresarial." },
+};
+
+// Estado completo de "motivación de compra" para una categoría con escala,
+// dada la cantidad ya acumulada en el carrito — de acá salen el mensaje,
+// la barra de progreso y el ahorro estimado (ver MotivacionCompra en
+// App.jsx). Devuelve null si la categoría no tiene escala o no hay nada
+// todavía en el carrito (no hay nada que motivar con cantidad 0).
+export function estadoMotivacion(categoria, cantidad) {
+  const escala = escalaDeCategoria(categoria);
+  if (!escala || !cantidad || cantidad <= 0) return null;
+
+  const actual = escalonAplicable(categoria, cantidad);
+  const siguiente = escala.find((e) => e.cantidadMinima > cantidad) ?? null;
+
+  const celebracion = CELEBRACION_POR_CANTIDAD[cantidad];
+  let mensaje;
+  if (celebracion) {
+    mensaje = celebracion;
+  } else if (siguiente) {
+    const faltan = siguiente.cantidadMinima - cantidad;
+    mensaje = {
+      emoji: null,
+      texto:
+        faltan === 1
+          ? `Solo te falta 1 unidad para desbloquear la tarifa de $${siguiente.precioUnitario.toFixed(2)} c/u.`
+          : `Por solo ${faltan} unidades más obtienes el precio de producción de $${siguiente.precioUnitario.toFixed(2)} c/u.`,
+    };
+  } else {
+    mensaje = { emoji: "🔥", texto: "Ya tenés la mejor tarifa disponible de Panaprice." };
+  }
+
+  // Ahorro: lo que se ahorraría comprando exactamente la cantidad mínima
+  // del siguiente escalón a su precio, contra pagar esas mismas unidades
+  // al precio actual (mismo criterio del ejemplo: 1 unidad a $10 -> a 3
+  // unidades y $6.50 c/u ahorra (10-6.5)*3 = $10.50).
+  const ahorro = siguiente ? (actual.precioUnitario - siguiente.precioUnitario) * siguiente.cantidadMinima : 0;
+
+  const inicioTramo = actual.cantidadMinima;
+  const finTramo = siguiente ? siguiente.cantidadMinima : actual.cantidadMinima;
+  const progreso = siguiente ? Math.min(100, Math.max(0, ((cantidad - inicioTramo) / (finTramo - inicioTramo)) * 100)) : 100;
+
+  return { mensaje, actual, siguiente, ahorro, progreso, cantidad };
+}

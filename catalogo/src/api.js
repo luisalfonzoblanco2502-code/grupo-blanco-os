@@ -102,7 +102,7 @@ function soloDigitos(texto) {
 // Arma el link wa.me con el pedido ya redactado — el cliente solo tiene que
 // tocar "Enviar" en WhatsApp. Si VITE_WHATSAPP_NUMERO no está configurado,
 // devuelve null (App.jsx lo maneja mostrando un aviso en vez de romper).
-export function armarLinkWhatsApp({ cliente, lineas, total, resumenCategorias = [] }) {
+export function armarLinkWhatsApp({ cliente, lineas, total, resumenCategorias = [], numeroOrden }) {
   const numero = soloDigitos(import.meta.env.VITE_WHATSAPP_NUMERO);
   if (!numero) return null;
 
@@ -129,6 +129,7 @@ export function armarLinkWhatsApp({ cliente, lineas, total, resumenCategorias = 
 
   const mensaje = [
     "Pedido desde el catálogo PanaPrice",
+    numeroOrden ? `N.º de orden: ${numeroOrden}` : null,
     "",
     `Cliente: ${cliente.nombre}`,
     `Teléfono: ${cliente.telefono}`,

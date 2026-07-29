@@ -1,16 +1,15 @@
 /* Identidad visual Panaprice — fábrica premium de personalización textil,
    no "tienda de sublimación". Blanco ~80% del diseño, negro para texto,
-   azul institucional para marca/interacción, naranja SOLO para acciones
-   de venta (Agregar al pedido / Cotizar / Comprar). Sin degradados, sin
-   fondos con textura, sin beige/crema. */
+   azul institucional para marca, navegación Y acciones de venta (Propuesta
+   B, elegida sobre mantener naranja en botones de compra: unifica toda la
+   identidad en blanco/negro/azul). Sin degradados, sin fondos con textura,
+   sin beige/crema, sin naranja. */
 :root {
   --blanco: #ffffff;
   --negro: #111111;
   --azul: #1146ff;
   --azul-oscuro: #0a1b33;
   --gris-claro: #f2f4f7;
-  --naranja: #ff6a00;
-  --naranja-texto: #ffffff;
 
   --texto: var(--negro);
   --texto-suave: #5b6472;
@@ -104,6 +103,15 @@ body {
   min-width: 0;
 }
 
+.logo-boton {
+  display: inline-flex;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
 .logo-imagen {
   height: 40px;
   width: auto;
@@ -134,7 +142,10 @@ body {
 
 .btn-carrito {
   font: inherit;
-  padding: 0.55rem 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.05rem;
   border-radius: 999px;
   border: 1.5px solid var(--negro);
   background: var(--blanco);
@@ -144,6 +155,41 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.btn-carrito-cifras {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.btn-carrito-cantidad {
+  font-size: 0.68rem;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.btn-carrito-total {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* "Bump" al agregar algo al carrito — discreto, sin rebote exagerado. */
+@keyframes carrito-bump {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.btn-carrito-bump {
+  animation: carrito-bump 0.4s ease;
 }
 
 .btn-carrito:hover {
@@ -156,16 +202,16 @@ body {
 /* Botones                                                                 */
 /* ---------------------------------------------------------------------- */
 
-/* .btn-primary: reservado para acciones de venta (Agregar al pedido,
-   Enviar pedido por WhatsApp, reabrir WhatsApp) — por eso es naranja. */
+/* .btn-primary: acciones de venta (Agregar al pedido, Enviar pedido por
+   WhatsApp, reabrir WhatsApp) — azul institucional (Propuesta B). */
 .btn-primary {
   font: inherit;
   margin-top: 0.5rem;
   padding: 0.65rem 1.2rem;
   border-radius: 10px;
   border: none;
-  background: var(--naranja);
-  color: var(--naranja-texto);
+  background: var(--azul);
+  color: #ffffff;
   cursor: pointer;
   font-weight: 600;
   transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
@@ -174,7 +220,7 @@ body {
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.06);
   transform: translateY(-1px) scale(1.01);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--naranja) 35%, transparent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--azul) 35%, transparent);
 }
 
 .btn-primary:disabled {
@@ -203,15 +249,15 @@ body {
   transform: translateY(-1px);
 }
 
-/* Botón secundario: sí es una acción de venta (Cotizar) -> naranja, en
-   contorno para no competir con el botón principal del hero. */
+/* Botón secundario: acción de venta (Cotizar), en contorno azul para no
+   competir visualmente con el botón principal (negro) del hero. */
 .btn-secundario {
   font: inherit;
   padding: 0.78rem 1.6rem;
   border-radius: 999px;
-  border: 1.5px solid var(--naranja);
+  border: 1.5px solid var(--azul);
   background: transparent;
-  color: var(--naranja);
+  color: var(--azul);
   cursor: pointer;
   font-weight: 600;
   text-decoration: none;
@@ -220,8 +266,8 @@ body {
 }
 
 .btn-secundario:hover {
-  background: var(--naranja);
-  color: var(--naranja-texto);
+  background: var(--azul);
+  color: #ffffff;
   transform: translateY(-1px);
 }
 
@@ -362,6 +408,51 @@ body {
   margin-bottom: 1.75rem;
 }
 
+/* ---------------------------------------------------------------------- */
+/* Motivación de compra: mensaje + barra de progreso hacia el siguiente   */
+/* escalón. Una sola vez por categoría (no por tarjeta) — la tarjeta       */
+/* se mantiene mínima a propósito.                                        */
+/* ---------------------------------------------------------------------- */
+.motivacion {
+  background: color-mix(in srgb, var(--azul) 6%, var(--blanco));
+  border: 1px solid color-mix(in srgb, var(--azul) 18%, var(--borde));
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.motivacion-mensaje {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--azul-oscuro);
+}
+
+.motivacion-barra {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--gris-claro);
+  overflow: hidden;
+  margin-top: 0.55rem;
+}
+
+.motivacion-barra-relleno {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--azul);
+  transition: width 0.4s ease;
+}
+
+.motivacion-detalle {
+  margin: 0.4rem 0 0;
+  font-size: 0.76rem;
+  color: var(--texto-suave);
+}
+
+.motivacion-detalle strong {
+  color: var(--azul-oscuro);
+}
+
 .barra-categorias {
   display: flex;
   gap: 0.5rem;
@@ -410,16 +501,19 @@ body {
 /* ---------------------------------------------------------------------- */
 /* Grilla de productos                                                     */
 /* ---------------------------------------------------------------------- */
+/* Mobile-first de verdad: 2 columnas es la regla BASE (para el teléfono),
+   no un ajuste dentro de una media query — el escritorio es el que se
+   adapta agregando más columnas a partir de acá, nunca al revés. */
 .grilla-productos {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.25rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.7rem;
 }
 
-@media (min-width: 480px) {
+@media (min-width: 640px) {
   .grilla-productos {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
   }
 }
 
@@ -433,7 +527,7 @@ body {
 .producto-card {
   background: var(--blanco);
   border: 1px solid var(--borde);
-  border-radius: 16px;
+  border-radius: 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -444,6 +538,12 @@ body {
   transform: translateY(-3px);
   box-shadow: 0 14px 28px rgba(10, 27, 51, 0.1);
   border-color: color-mix(in srgb, var(--azul) 25%, var(--borde));
+}
+
+@media (min-width: 640px) {
+  .producto-card {
+    border-radius: 16px;
+  }
 }
 
 .producto-imagen-wrap {
@@ -492,8 +592,9 @@ body {
 
 /* Badge comercial: esquina inferior izquierda a propósito — así nunca
    choca con la categoría (arriba-izquierda) ni con "Agotado"
-   (arriba-derecha), y no tapa el centro de la foto. Paleta contenida
-   (marca + naranja solo para "oferta", que sí es una señal de venta). */
+   (arriba-derecha), y no tapa el centro de la foto. "Oferta" usa el azul
+   claro de --acento (en vez del --azul-oscuro por defecto) para distinguirse
+   sin salir de la paleta azul/blanco/negro. */
 .badge-esquina-inferior {
   position: absolute;
   left: 0.6rem;
@@ -513,48 +614,84 @@ body {
 }
 
 .badge-producto-oferta {
-  background: var(--naranja);
+  background: var(--azul);
 }
 
+/* Compacto primero (teléfono): menos padding, menos aire vertical, para
+   que quepan más productos por pantalla sin perder elegancia. Escala hacia
+   arriba a partir de 640px, no al revés. */
 .producto-info {
-  padding: 1.1rem 1.15rem 1.3rem;
+  padding: 0.7rem 0.75rem 0.85rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.15rem;
+}
+
+@media (min-width: 640px) {
+  .producto-info {
+    padding: 1.1rem 1.15rem 1.3rem;
+    gap: 0.25rem;
+  }
 }
 
 /* El nombre es lo primero y lo más visible del bloque de texto; el código
    queda como referencia secundaria debajo, chica y discreta. */
 .producto-info h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: -0.005em;
   line-height: 1.25;
 }
 
+@media (min-width: 640px) {
+  .producto-info h3 {
+    font-size: 1.05rem;
+  }
+}
+
 .producto-codigo {
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   letter-spacing: 0.02em;
   color: var(--texto-suave);
   font-weight: 500;
 }
 
-/* Precio principal: informativo, no es un botón -> azul (marca/tecnología),
-   no naranja (reservado para la acción de venta en sí). */
+@media (min-width: 640px) {
+  .producto-codigo {
+    font-size: 0.72rem;
+  }
+}
+
 .producto-precio {
   font-weight: 800;
-  font-size: 1.35rem;
+  font-size: 1.05rem;
   letter-spacing: -0.01em;
-  margin: 0.35rem 0 0;
+  margin: 0.2rem 0 0;
   color: var(--azul);
+  /* La cifra puede cambiar en vivo (ver acumuladoCategoriaActual) —
+     transición suave, nunca un salto brusco. */
+  transition: color 0.2s ease;
+}
+
+@media (min-width: 640px) {
+  .producto-precio {
+    font-size: 1.35rem;
+    margin-top: 0.35rem;
+  }
 }
 
 .precio-sufijo {
-  font-size: 0.8rem;
+  font-size: 0.68rem;
   font-weight: 600;
   color: var(--texto-suave);
   margin-left: 0.1rem;
+}
+
+@media (min-width: 640px) {
+  .precio-sufijo {
+    font-size: 0.8rem;
+  }
 }
 
 /* Enlace compacto que despliega la tabla de producción dentro de la misma
@@ -565,9 +702,9 @@ body {
   align-self: flex-start;
   background: none;
   border: none;
-  padding: 0.15rem 0;
-  margin-top: 0.3rem;
-  font-size: 0.78rem;
+  padding: 0.1rem 0;
+  margin-top: 0.2rem;
+  font-size: 0.66rem;
   font-weight: 600;
   color: var(--azul);
   cursor: pointer;
@@ -575,19 +712,32 @@ body {
   text-underline-offset: 2px;
 }
 
+@media (min-width: 640px) {
+  .link-tarifas {
+    font-size: 0.78rem;
+    margin-top: 0.3rem;
+  }
+}
+
 .tabla-tarifas {
   width: 100%;
   border-collapse: collapse;
   margin-top: 0.4rem;
-  font-size: 0.76rem;
+  font-size: 0.66rem;
   background: var(--gris-claro);
   border-radius: 8px;
   overflow: hidden;
 }
 
+@media (min-width: 640px) {
+  .tabla-tarifas {
+    font-size: 0.76rem;
+  }
+}
+
 .tabla-tarifas th,
 .tabla-tarifas td {
-  padding: 0.35rem 0.5rem;
+  padding: 0.25rem 0.35rem;
   text-align: center;
 }
 
@@ -611,19 +761,26 @@ body {
 .selector-cantidad {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
-  margin-top: 0.7rem;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+@media (min-width: 640px) {
+  .selector-cantidad {
+    gap: 0.85rem;
+    margin-top: 0.7rem;
+  }
 }
 
 .selector-cantidad button {
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.1rem;
+  height: 2.1rem;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--borde);
   background: var(--blanco);
   color: var(--texto);
-  font-size: 1.3rem;
+  font-size: 1.05rem;
   font-weight: 700;
   cursor: pointer;
   display: flex;
@@ -644,29 +801,60 @@ body {
   cursor: not-allowed;
 }
 
+@media (min-width: 640px) {
+  .selector-cantidad button {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 10px;
+    font-size: 1.3rem;
+  }
+}
+
 .cantidad-valor {
-  min-width: 2.25rem;
+  min-width: 1.6rem;
   text-align: center;
-  font-size: 1.1rem;
+  font-size: 0.92rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   user-select: none;
 }
 
+@media (min-width: 640px) {
+  .cantidad-valor {
+    min-width: 2.25rem;
+    font-size: 1.1rem;
+  }
+}
+
 .producto-subtotal {
-  margin: 0.3rem 0 0;
-  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--texto-suave);
+}
+
+@media (min-width: 640px) {
+  .producto-subtotal {
+    margin-top: 0.3rem;
+    font-size: 0.85rem;
+  }
 }
 
 /* Solo dentro de la tarjeta de producto: botón a todo el ancho. No se
    escapa a otros usos de .btn-primary (checkout, confirmación). */
 .producto-info .btn-primary {
   width: 100%;
-  margin-top: 0.6rem;
-  padding: 0.75rem 1.1rem;
-  font-size: 0.92rem;
+  margin-top: 0.45rem;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+@media (min-width: 640px) {
+  .producto-info .btn-primary {
+    margin-top: 0.6rem;
+    padding: 0.75rem 1.1rem;
+    font-size: 0.92rem;
+  }
 }
 
 /* WhatsApp mantiene su verde de marca reconocible — no es parte de la
@@ -700,7 +888,26 @@ body {
   margin: 0 auto;
 }
 
+.link-volver {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--azul);
+  cursor: pointer;
+}
+
+.link-volver:hover {
+  text-decoration: underline;
+}
+
+/* Estilo "carrito Shopify": miniatura + nombre/referencia/precio en la
+   misma línea, controles debajo. */
 .linea-carrito {
+  display: flex;
+  gap: 0.85rem;
   border: 1px solid var(--borde);
   border-radius: 12px;
   padding: 0.85rem 1.1rem;
@@ -708,10 +915,50 @@ body {
   background: var(--blanco);
 }
 
+.linea-miniatura-wrap {
+  flex-shrink: 0;
+}
+
+.linea-miniatura {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  display: block;
+  background: var(--gris-claro);
+}
+
+.linea-miniatura-vacia {
+  background: var(--gris-claro);
+}
+
+.linea-cuerpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.linea-encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.linea-ref {
+  font-size: 0.72rem;
+  color: var(--texto-suave);
+}
+
 .linea-precio {
   color: var(--texto-suave);
-  margin-left: 0.5rem;
   font-size: 0.85rem;
+}
+
+.linea-subtotal {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--azul);
 }
 
 .linea-controles {
@@ -805,6 +1052,11 @@ textarea:focus {
   max-width: 480px;
   margin: 3rem auto;
   text-align: center;
+}
+
+.orden-numero {
+  font-size: 0.85rem;
+  color: var(--texto-suave);
 }
 
 .confirmacion .btn-primary {

@@ -1,11 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getProductos, intentarCrearSolicitudEnERP, armarLinkWhatsApp, armarLinkWhatsAppGenerico } from "./api";
+
+// Vive acá (no en pdf.js) a propósito: pdf.js importa jsPDF, una librería
+// pesada (~200KB gzip) que NO debe entrar al bundle inicial del catálogo
+// (prioridad #1 de este sprint: velocidad mobile-first) — se carga con
+// import() dinámico recién cuando el cliente confirma el pedido, ver
+// handleEnviarPedido. Este número, en cambio, no depende de jsPDF y hace
+// falta antes (para el mensaje de WhatsApp), así que se queda liviano acá.
+function numeroOrdenBorrador() {
+  const ahora = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `BP-${ahora.getFullYear()}${pad(ahora.getMonth() + 1)}${pad(ahora.getDate())}-${pad(ahora.getHours())}${pad(ahora.getMinutes())}${pad(ahora.getSeconds())}`;
+}
 import {
   ESCALAS_POR_CATEGORIA,
   escalaParaMostrar,
   escalonAplicable,
   precioUnitarioPorCategoria,
   acumularPorCategoria,
+  estadoMotivacion,
 } from "./pricing";
 
 // Fallback para categorías SIN escala unificada (ver pricing.js): mismo
@@ -62,23 +75,39 @@ function BadgeProducto({ tipo }) {
 // si no (o falla la carga), cae a un wordmark de texto con el mismo
 // espíritu que el logo de marca (PANAPRICE en negro + CUSTOM en azul).
 // Poner el archivo ahí lo activa sin tocar código.
-function LogoPanaprice({ grande = false }) {
+function LogoPanaprice({ grande = false, onClick }) {
   const [error, setError] = useState(false);
-  if (error) {
-    return (
-      <div className={grande ? "logo-texto logo-texto-grande" : "logo-texto"} aria-label="PanaPrice Custom">
-        <span className="logo-principal">PANAPRICE</span>
-        <span className="logo-secundario">— CUSTOM —</span>
-      </div>
-    );
-  }
-  return (
+  const contenido = error ? (
+    <div className={grande ? "logo-texto logo-texto-grande" : "logo-texto"} aria-label="PanaPrice Custom">
+      <span className="logo-principal">PANAPRICE</span>
+      <span className="logo-secundario">— CUSTOM —</span>
+    </div>
+  ) : (
     <img
       src="/logo-panaprice.png"
       alt="PanaPrice Custom"
       className={grande ? "logo-imagen logo-imagen-grande" : "logo-imagen"}
       onError={() => setError(true)}
     />
+  );
+
+  // Tocar el logo vuelve al catálogo (patrón universal) — solo cuando hay
+  // algo a donde volver; en el hero grande no hace falta que sea clicable.
+  if (!onClick) return contenido;
+  return (
+    <button type="button" className="logo-boton" onClick={onClick} aria-label="Ir al inicio del catálogo">
+      {contenido}
+    </button>
+  );
+}
+
+function IconoCarrito() {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="20" r="1.4" />
+      <circle cx="17" cy="20" r="1.4" />
+      <path d="M2.5 3h2l2.2 11.4a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L20 7H6" />
+    </svg>
   );
 }
 
@@ -190,6 +219,42 @@ function Buscador({ valor, onChange }) {
         onChange={(e) => onChange(e.target.value)}
         aria-label="Buscar productos"
       />
+    </div>
+  );
+}
+
+// Banner de motivación de compra — una sola vez por categoría con escala
+// (no por tarjeta: la tarjeta se mantiene mínima a propósito, ver
+// ProductoCard). Se recalcula solo de `estadoMotivacion`, que ya depende
+// del carrito completo — reactivo automáticamente a cualquier cambio de
+// cantidad, sin lógica propia acá.
+function MotivacionCompra({ categoria, cantidad }) {
+  const estado = estadoMotivacion(categoria, cantidad);
+  if (!estado) return null;
+
+  return (
+    <div className="motivacion" role="status">
+      <p className="motivacion-mensaje">
+        {estado.mensaje.emoji && <span aria-hidden="true">{estado.mensaje.emoji} </span>}
+        {estado.mensaje.texto}
+      </p>
+      {estado.siguiente && (
+        <>
+          <div className="motivacion-barra">
+            <div className="motivacion-barra-relleno" style={{ width: `${estado.progreso}%` }} />
+          </div>
+          <p className="motivacion-detalle">
+            Te faltan <strong>{estado.siguiente.cantidadMinima - cantidad}</strong> para $
+            {estado.siguiente.precioUnitario.toFixed(2)} c/u
+            {estado.ahorro > 0 && (
+              <>
+                {" "}
+                · Ahorro estimado: <strong>${estado.ahorro.toFixed(2)}</strong>
+              </>
+            )}
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -332,8 +397,14 @@ function ProductoCard({ producto, onAgregar, acumuladoCategoriaActual, tarifaAbi
 
         {escala ? (
           <>
+            {/* Precio EN VIVO, no un techo estático: refleja la cantidad ya
+                acumulada de la categoría en el carrito + lo que se está por
+                agregar acá (mismo cálculo que el Subtotal de abajo). Por
+                eso el cliente ve el precio bajar en TODAS las tarjetas de
+                Pañoletas apenas el carrito cruza un escalón, sin tener que
+                entrar al carrito — el incentivo central de este sprint. */}
             <p className="producto-precio">
-              Desde ${escala[escala.length - 1].precioUnitario.toFixed(2)}
+              Desde ${unitarioSubtotal.toFixed(2)}
               <span className="precio-sufijo"> c/u</span>
             </p>
             <button type="button" className="link-tarifas" onClick={onToggleTarifa} aria-expanded={tarifaAbierta}>
@@ -395,6 +466,8 @@ export function App() {
   const [enviando, setEnviando] = useState(false);
   const [linkWhatsApp, setLinkWhatsApp] = useState(null);
   const [avisoErp, setAvisoErp] = useState(null);
+  const [numeroOrden, setNumeroOrden] = useState(null);
+  const [pdfInfo, setPdfInfo] = useState(null);
   const [categoriaActiva, setCategoriaActiva] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
   // Solo una tarjeta puede tener la tabla de tarifas abierta a la vez —
@@ -468,6 +541,20 @@ export function App() {
   const total = useMemo(() => lineasConSubtotal.reduce((suma, l) => suma + l.subtotal, 0), [lineasConSubtotal]);
   const cantidadTotal = useMemo(() => lineasConSubtotal.reduce((n, l) => n + l.cantidad, 0), [lineasConSubtotal]);
 
+  // Pequeño "bump" en el botón del carrito cada vez que sube la cantidad
+  // total — puramente visual, no toca el estado del carrito en sí.
+  const [carritoAnimado, setCarritoAnimado] = useState(false);
+  const cantidadPrevia = useRef(cantidadTotal);
+  useEffect(() => {
+    if (cantidadTotal > cantidadPrevia.current) {
+      setCarritoAnimado(true);
+      const temporizador = setTimeout(() => setCarritoAnimado(false), 450);
+      cantidadPrevia.current = cantidadTotal;
+      return () => clearTimeout(temporizador);
+    }
+    cantidadPrevia.current = cantidadTotal;
+  }, [cantidadTotal]);
+
   // Resumen por categoría (para el bloque del carrito y el mensaje de
   // WhatsApp): cuántas unidades de esa categoría hay en total, qué escalón
   // alcanzaron y cuánto suma esa categoría sola. Recorre ESCALAS_POR_CATEGORIA
@@ -493,8 +580,19 @@ export function App() {
     e.preventDefault();
     setEnviando(true);
 
-    const link = armarLinkWhatsApp({ cliente, lineas: lineasConSubtotal, total, resumenCategorias });
+    const orden = numeroOrdenBorrador();
+    setNumeroOrden(orden);
+
+    const link = armarLinkWhatsApp({ cliente, lineas: lineasConSubtotal, total, resumenCategorias, numeroOrden: orden });
     setLinkWhatsApp(link);
+
+    // El navegador solo deja abrir un popup sin bloquearlo si pasa DENTRO
+    // del mismo gesto síncrono del usuario (este click) — por eso se abre
+    // ACÁ, antes de cualquier `await` (generar el PDF implica esperar
+    // fetch() de las imágenes, y para entonces el navegador ya no lo
+    // consideraría "originado por el usuario"). El pedido por WhatsApp
+    // sigue siendo la vía garantizada aunque el PDF tarde o falle.
+    if (link) window.open(link, "_blank");
 
     intentarCrearSolicitudEnERP({
       clienteNombre: cliente.nombre,
@@ -507,7 +605,25 @@ export function App() {
       })),
     }).then((resultado) => setAvisoErp(resultado));
 
-    if (link) window.open(link, "_blank");
+    // Best-effort también: si el PDF falla (imagen rota, navegador raro, o
+    // el import() dinámico de jsPDF no carga), no debe impedir llegar a la
+    // pantalla de confirmación — el pedido por WhatsApp ya se disparó
+    // arriba de todos modos. import() dinámico a propósito: jsPDF es
+    // pesado y no debe estar en el bundle inicial del catálogo.
+    try {
+      const { generarPdfPedido } = await import("./pdf");
+      const nombreArchivo = await generarPdfPedido({
+        cliente,
+        lineas: lineasConSubtotal,
+        resumenCategorias,
+        total,
+        numeroOrden: orden,
+      });
+      setPdfInfo({ ok: true, nombreArchivo });
+    } catch (err) {
+      setPdfInfo({ ok: false, motivo: err.message });
+    }
+
     setVista("confirmacion");
     setEnviando(false);
   }
@@ -516,14 +632,25 @@ export function App() {
     return (
       <div className="pagina">
         <header className="cabecera">
-          <LogoPanaprice />
+          <LogoPanaprice onClick={() => setVista("catalogo")} />
         </header>
         <main className="confirmacion">
           <h2>¡Pedido listo!</h2>
+          {numeroOrden && (
+            <p className="orden-numero">
+              N.º de orden: <strong>{numeroOrden}</strong>
+            </p>
+          )}
           <p>
             Se abrió WhatsApp con tu pedido redactado — solo tenés que tocar <strong>Enviar</strong> en
             la conversación para confirmarlo con nuestro equipo.
           </p>
+          {pdfInfo?.ok && (
+            <p>
+              También se descargó tu pedido en PDF (<strong>{pdfInfo.nombreArchivo}</strong>) — adjuntalo en la
+              misma conversación de WhatsApp para que quede completo.
+            </p>
+          )}
           {linkWhatsApp ? (
             <a className="btn-primary" href={linkWhatsApp} target="_blank" rel="noreferrer">
               ¿No se abrió? Tocá acá para abrir WhatsApp
@@ -537,6 +664,9 @@ export function App() {
           {avisoErp && !avisoErp.ok && (
             <p className="nota-tecnica">(Nota interna: no se pudo registrar automáticamente en el sistema — {avisoErp.motivo}. El pedido por WhatsApp sigue siendo válido.)</p>
           )}
+          {pdfInfo && !pdfInfo.ok && (
+            <p className="nota-tecnica">(No se pudo generar el PDF automáticamente — {pdfInfo.motivo}. El pedido por WhatsApp sigue siendo válido.)</p>
+          )}
         </main>
         <BotonWhatsAppFlotante />
       </div>
@@ -547,10 +677,17 @@ export function App() {
     <div className="pagina">
       <header className="cabecera">
         <div className="cabecera-marca">
-          <LogoPanaprice />
+          <LogoPanaprice onClick={() => setVista("catalogo")} />
         </div>
-        <button className="btn-carrito" onClick={() => setVista(vista === "checkout" ? "catalogo" : "checkout")}>
-          Carrito ({cantidadTotal}) · ${total.toFixed(2)}
+        <button
+          className={`btn-carrito${carritoAnimado ? " btn-carrito-bump" : ""}`}
+          onClick={() => setVista(vista === "checkout" ? "catalogo" : "checkout")}
+        >
+          <IconoCarrito />
+          <span className="btn-carrito-cifras">
+            <span className="btn-carrito-cantidad">{cantidadTotal}</span>
+            <span className="btn-carrito-total">${total.toFixed(2)}</span>
+          </span>
         </button>
       </header>
 
@@ -566,6 +703,13 @@ export function App() {
             />
             <Buscador valor={busqueda} onChange={setBusqueda} />
           </div>
+          {Object.keys(ESCALAS_POR_CATEGORIA).map((categoria) => (
+            <MotivacionCompra
+              key={categoria}
+              categoria={categoria}
+              cantidad={acumuladoPorCategoriaEnCarrito[categoria] || 0}
+            />
+          ))}
           {cargando && <p>Cargando catálogo...</p>}
           <div className="grilla-productos" id="grilla-productos">
             {productosFiltrados.map((p) => (
@@ -588,28 +732,42 @@ export function App() {
 
       {vista === "checkout" && (
         <main className="checkout">
+          <button type="button" className="link-volver" onClick={() => setVista("catalogo")}>
+            ← Volver al catálogo
+          </button>
           <h2>Tu pedido</h2>
           {carrito.length === 0 && <p>Tu carrito está vacío.</p>}
           {lineasConSubtotal.map((linea) => (
             <div className="linea-carrito" key={linea.clave}>
-              <div>
-                <strong>{linea.producto.nombre}</strong>
-                <span className="linea-precio">${linea.unitario.toFixed(2)} c/u</span>
+              <div className="linea-miniatura-wrap">
+                {linea.producto.imagenUrl ? (
+                  <img src={linea.producto.imagenUrl} alt={linea.producto.nombre} className="linea-miniatura" />
+                ) : (
+                  <div className="linea-miniatura linea-miniatura-vacia" aria-hidden="true" />
+                )}
               </div>
-              <div className="linea-controles">
-                <input
-                  type="number"
-                  min={1}
-                  value={linea.cantidad}
-                  onChange={(e) => actualizarLinea(linea.clave, { cantidad: e.target.value })}
-                />
-                <input
-                  type="text"
-                  placeholder="Notas de diseño (ej. colores, logo)"
-                  value={linea.disenoNotas}
-                  onChange={(e) => actualizarLinea(linea.clave, { disenoNotas: e.target.value })}
-                />
-                <button onClick={() => quitarLinea(linea.clave)}>Quitar</button>
+              <div className="linea-cuerpo">
+                <div className="linea-encabezado">
+                  <strong>{linea.producto.nombre}</strong>
+                  <span className="linea-ref">Ref. {linea.producto.codigo}</span>
+                  <span className="linea-precio">${linea.unitario.toFixed(2)} c/u</span>
+                </div>
+                <div className="linea-controles">
+                  <input
+                    type="number"
+                    min={1}
+                    value={linea.cantidad}
+                    onChange={(e) => actualizarLinea(linea.clave, { cantidad: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Notas de diseño (ej. colores, logo)"
+                    value={linea.disenoNotas}
+                    onChange={(e) => actualizarLinea(linea.clave, { disenoNotas: e.target.value })}
+                  />
+                  <button onClick={() => quitarLinea(linea.clave)}>Quitar</button>
+                </div>
+                <p className="linea-subtotal">Subtotal: ${linea.subtotal.toFixed(2)}</p>
               </div>
             </div>
           ))}
