@@ -102,7 +102,7 @@ function soloDigitos(texto) {
 // Arma el link wa.me con el pedido ya redactado — el cliente solo tiene que
 // tocar "Enviar" en WhatsApp. Si VITE_WHATSAPP_NUMERO no está configurado,
 // devuelve null (App.jsx lo maneja mostrando un aviso en vez de romper).
-export function armarLinkWhatsApp({ cliente, lineas, total }) {
+export function armarLinkWhatsApp({ cliente, lineas, total, resumenCategorias = [] }) {
   const numero = soloDigitos(import.meta.env.VITE_WHATSAPP_NUMERO);
   if (!numero) return null;
 
@@ -111,6 +111,20 @@ export function armarLinkWhatsApp({ cliente, lineas, total }) {
       const nota = l.disenoNotas ? ` (${l.disenoNotas})` : "";
       return `- [${l.producto.codigo}] ${l.producto.nombre}${nota} — ${l.cantidad}x $${l.unitario.toFixed(2)} = $${l.subtotal.toFixed(2)}`;
     })
+    .join("\n");
+
+  // Un bloque de resumen por cada categoría con escala acumulada (hoy solo
+  // Pañoletas) — mismos datos que se muestran en el carrito, para que el
+  // equipo vea de un vistazo qué tarifa aplicó sin tener que sumar a mano.
+  const bloquesResumen = resumenCategorias
+    .map(
+      (r) =>
+        `\nResumen ${r.categoria}:\n` +
+        `Total ${r.categoria.toLowerCase()}: ${r.cantidad}\n` +
+        `Tarifa aplicada: desde ${r.escalon.cantidadMinima} ${r.escalon.cantidadMinima === 1 ? "unidad" : "unidades"}\n` +
+        `Precio unitario: $${r.escalon.precioUnitario.toFixed(2)}\n` +
+        `Subtotal ${r.categoria}: $${r.subtotal.toFixed(2)}`
+    )
     .join("\n");
 
   const mensaje = [
@@ -122,6 +136,7 @@ export function armarLinkWhatsApp({ cliente, lineas, total }) {
     "",
     "Productos:",
     detalleItems,
+    bloquesResumen,
     "",
     `Total estimado: $${total.toFixed(2)}`,
   ].join("\n");

@@ -176,10 +176,18 @@ export async function editarProducto(productoId, empresaId, cambios) {
 }
 
 export async function eliminarProducto(productoId, empresaId) {
-  await obtenerProducto(productoId, empresaId);
+  const actual = await obtenerProducto(productoId, empresaId);
   return prisma.producto.update({
     where: { id: productoId },
-    data: { eliminadoEn: new Date(), publicadoCatalogo: false },
+    data: {
+      eliminadoEn: new Date(),
+      publicadoCatalogo: false,
+      // @@unique([empresaId, codigo]) no filtra por eliminadoEn, así que un
+      // soft-delete por sí solo dejaba el código "atrapado" para siempre
+      // (bug real: PA-001, 2026-07-29) — se libera acá renombrándolo, sin
+      // perder la fila ni las referencias históricas que ya apunten a ella.
+      codigo: `${actual.codigo}__eliminado_${Date.now()}`,
+    },
   });
 }
 

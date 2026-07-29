@@ -271,10 +271,26 @@ body {
   width: 100%;
 }
 
+/* Columnas explícitas por breakpoint (no auto-fill): así el ancho de
+   escritorio da 4 por fila de manera predecible, no "lo que entre". */
 .grilla-productos {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 2.25rem;
+  grid-template-columns: 1fr;
+  gap: 1.1rem;
+}
+
+@media (min-width: 480px) {
+  .grilla-productos {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .grilla-productos {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
 }
 
 .producto-card {
@@ -297,12 +313,14 @@ body {
   position: relative;
 }
 
-/* La foto es la protagonista: formato retrato (moda), ocupa casi toda la
-   tarjeta antes de llegar a la info. */
+/* La foto sigue siendo la protagonista, pero con menos altura que antes
+   (4:5 -> 1:1) para que la tarjeta no quede tan larga en una grilla de 4
+   columnas. Proporción uniforme + object-fit: cover en todas — nunca se
+   deforma una imagen, sea cual sea su tamaño original. */
 .producto-card img,
 .producto-imagen-vacia {
   width: 100%;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
   background: var(--borde);
   display: block;
@@ -380,92 +398,103 @@ body {
 }
 
 .producto-info {
-  padding: 1.1rem 1.25rem 1.35rem;
+  padding: 1rem 1.1rem 1.2rem;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.25rem;
 }
 
-/* Código: presente pero discreto — la protagonista es la foto, después el
-   nombre; el código queda como una etiqueta chica, no como dato técnico. */
-.producto-codigo {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--texto-suave);
-  font-weight: 600;
-}
-
+/* El nombre es lo primero y lo más visible del bloque de texto; el código
+   queda como referencia secundaria debajo, chica y discreta. */
 .producto-info h3 {
-  margin: 0.1rem 0 0;
-  font-size: 1.25rem;
-  font-weight: 600;
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1.2;
 }
 
+.producto-codigo {
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--texto-suave);
+  font-weight: 500;
+}
+
 .producto-descripcion {
   color: var(--texto-suave);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   margin: 0;
 }
 
-/* Precio: el elemento más llamativo de la tarjeta después de la foto.
-   Se recalcula según la cantidad elegida en el selector (ver
-   selector-cantidad más abajo) — por eso NO dice "desde": es el precio
-   real aplicable a lo que el cliente está por agregar. */
+/* Precio principal: "Desde $X c/u" (mejor precio de la escala) — el
+   elemento más llamativo después de la foto. */
 .producto-precio {
   font-weight: 800;
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   letter-spacing: -0.01em;
-  margin: 0.25rem 0 0;
+  margin: 0.2rem 0 0;
   color: var(--acento);
 }
 
 .precio-sufijo {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--texto-suave);
   margin-left: 0.1rem;
 }
 
-/* Precio por volumen como beneficio comercial ("Precio Mayorista"), no
-   como una tabla técnica de escalones — misma información, otro marco. */
-.producto-volumen {
-  list-style: none;
-  padding: 0;
-  margin: 0.3rem 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.volumen-item {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  column-gap: 0.4rem;
-  background: color-mix(in srgb, var(--acento) 9%, transparent);
-  padding: 0.4rem 0.7rem;
-  border-radius: 8px;
-}
-
-.volumen-encabezado {
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: var(--acento);
-  flex-basis: 100%;
-}
-
-.volumen-condicion {
-  font-size: 0.75rem;
+.producto-precio-base {
+  margin: 0;
+  font-size: 0.82rem;
   color: var(--texto-suave);
   font-weight: 600;
 }
 
-.volumen-precio {
-  font-size: 0.85rem;
-  font-weight: 800;
+/* Enlace compacto que despliega la tabla de tarifas dentro de la misma
+   tarjeta — a propósito NO es un <details>/<summary> nativo: el estado de
+   "cuál está abierta" se controla desde App (una sola a la vez, ver
+   tarifaAbiertaId), un <details> por tarjeta no se puede cerrar entre sí. */
+.link-tarifas {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0.15rem 0;
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--acento);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tabla-tarifas {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  background: color-mix(in srgb, var(--acento) 6%, var(--superficie));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tabla-tarifas th,
+.tabla-tarifas td {
+  padding: 0.35rem 0.5rem;
+  text-align: center;
+}
+
+.tabla-tarifas thead th {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--texto-suave);
+  border-bottom: 1px solid var(--borde);
+}
+
+.tabla-tarifas tbody td:last-child {
+  font-weight: 700;
   color: var(--acento);
 }
 
@@ -628,6 +657,31 @@ textarea {
   color: var(--texto);
 }
 
+/* Resumen por categoría con escala acumulada (hoy: Pañoletas) — se muestra
+   en el carrito antes del total general. */
+.resumen-categorias {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0.75rem 0;
+}
+
+.resumen-categoria {
+  background: color-mix(in srgb, var(--acento) 8%, var(--superficie));
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+}
+
+.resumen-categoria p {
+  margin: 0.15rem 0;
+  font-size: 0.88rem;
+}
+
+.resumen-categoria strong {
+  font-weight: 700;
+}
+
 .total {
   font-size: 1.2rem;
   font-weight: 700;
@@ -668,10 +722,10 @@ textarea {
   margin-top: 1.5rem;
 }
 
-/* Mobile-first: los estilos base ya apilan bien en pantallas angostas
-   (grilla-productos colapsa a 1 columna sola con auto-fill/minmax). Estos
-   ajustes son para los ~360-400px de un teléfono real, donde el header y
-   los inputs de línea necesitan más aire vertical que horizontal. */
+/* Mobile-first: la grilla ya define su propia columna única por debajo de
+   480px (ver .grilla-productos más arriba). Estos ajustes son para el resto
+   de la página en los ~360-400px de un teléfono real, donde el header y los
+   inputs de línea necesitan más aire vertical que horizontal. */
 @media (max-width: 480px) {
   .pagina {
     padding: 0.75rem;

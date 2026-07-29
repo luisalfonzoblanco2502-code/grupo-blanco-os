@@ -1,17 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 import { getProductos, intentarCrearSolicitudEnERP, armarLinkWhatsApp, armarLinkWhatsAppGenerico } from "./api";
+import {
+  ESCALAS_POR_CATEGORIA,
+  escalaParaMostrar,
+  escalonAplicable,
+  precioUnitarioPorCategoria,
+  acumularPorCategoria,
+} from "./pricing";
 
-// Mismo criterio que precioUnitarioParaCantidad en
-// server/src/services/productos.service.js: el escalón de mayor
-// cantidadMinima que no supere la cantidad pedida, si no hay ninguno el
-// precioBase. Se recalcula acá solo para feedback inmediato en el carrito —
-// los precios en sí SIEMPRE vienen de la fuente de datos activa (local o
-// API), nunca hardcodeados en la interfaz.
+// Fallback para categorías SIN escala unificada (ver pricing.js): mismo
+// criterio de siempre, precio por producto individual. Categorías con
+// escala propia (hoy: Pañoletas) no pasan por acá — usan
+// precioUnitarioPorCategoria sobre la cantidad acumulada del carrito.
 function precioUnitario(producto, cantidad) {
   const aplicable = [...(producto.preciosVolumen ?? [])]
     .filter((e) => cantidad >= e.cantidadMinima)
     .sort((a, b) => b.cantidadMinima - a.cantidadMinima)[0];
   return aplicable ? Number(aplicable.precioUnitario) : Number(producto.precioBase);
+}
+
+// Precio unitario "real" de una línea, sea cual sea su categoría —
+// centraliza la decisión "¿esta categoría tiene escala propia o no?" para
+// no repetirla en cada lugar que calcula precios (tarjeta, carrito, resumen).
+function precioUnitarioLinea(producto, cantidad, cantidadAcumuladaCategoria) {
+  const conEscala = ESCALAS_POR_CATEGORIA[producto.categoria];
+  return conEscala
+    ? precioUnitarioPorCategoria(producto.categoria, cantidadAcumuladaCategoria)
+    : precioUnitario(producto, cantidad);
 }
 
 // ============================================================================
@@ -171,13 +186,21 @@ function BarraBeneficios() {
   );
 }
 
-function ProductoCard({ producto, onAgregar }) {
+function ProductoCard({ producto, onAgregar, acumuladoCategoriaActual, tarifaAbierta, onToggleTarifa }) {
   const agotado = producto.disponible === false;
   const [imagenRota, setImagenRota] = useState(false);
   const [cantidad, setCantidad] = useState(1);
 
-  const unitario = precioUnitario(producto, cantidad);
-  const subtotal = unitario * cantidad;
+  // Vista previa honesta: si esta categoría tiene escala unificada, el
+  // precio que se le aplicaría a ESTA línea es el de la cantidad total que
+  // quedaría en esa categoría (lo que ya hay en el carrito + lo que se está
+  // por agregar acá) — no un precio aislado que después cambiaría al
+  // agregarlo. Categorías sin escala siguen su lógica de siempre.
+  const cantidadProyectada = (acumuladoCategoriaActual || 0) + cantidad;
+  const unitarioSubtotal = precioUnitarioLinea(producto, cantidad, cantidadProyectada);
+  const subtotal = unitarioSubtotal * cantidad;
+
+  const escala = escalaParaMostrar(producto);
 
   function restar() {
     setCantidad((c) => Math.max(1, c - 1));
@@ -218,23 +241,45 @@ function ProductoCard({ producto, onAgregar }) {
         )}
       </div>
       <div className="producto-info">
-        <span className="producto-codigo">{producto.codigo}</span>
         <h3>{producto.nombre}</h3>
-        {producto.descripcion && <p className="producto-descripcion">{producto.descripcion}</p>}
-        <p className="producto-precio">
-          ${unitario.toFixed(2)}
-          <span className="precio-sufijo"> c/u</span>
-        </p>
-        {producto.preciosVolumen?.length > 0 && (
-          <ul className="producto-volumen">
-            {producto.preciosVolumen.map((e) => (
-              <li key={e.id} className="volumen-item">
-                <span className="volumen-encabezado">🔥 Precio Mayorista</span>
-                <span className="volumen-condicion">{e.cantidadMinima}+ unidades</span>
-                <span className="volumen-precio">${Number(e.precioUnitario).toFixed(2)} c/u</span>
-              </li>
-            ))}
-          </ul>
+        <span className="producto-codigo">Ref. {producto.codigo}</span>
+
+        {escala ? (
+          <>
+            <p className="producto-precio">
+              Desde ${escala[escala.length - 1].precioUnitario.toFixed(2)}
+              <span className="precio-sufijo"> c/u</span>
+            </p>
+            <p className="producto-precio-base">1 unidad: ${escala[0].precioUnitario.toFixed(2)}</p>
+            <button type="button" className="link-tarifas" onClick={onToggleTarifa} aria-expanded={tarifaAbierta}>
+              Ver tarifas por cantidad {tarifaAbierta ? "▲" : "▼"}
+            </button>
+            {tarifaAbierta && (
+              <table className="tabla-tarifas">
+                <thead>
+                  <tr>
+                    <th>Cantidad</th>
+                    <th>Total</th>
+                    <th>Precio unitario</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {escala.map((e) => (
+                    <tr key={e.cantidadMinima}>
+                      <td>{e.cantidadMinima}</td>
+                      <td>${(e.cantidadMinima * e.precioUnitario).toFixed(2)}</td>
+                      <td>${e.precioUnitario.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        ) : (
+          <p className="producto-precio">
+            ${Number(producto.precioBase).toFixed(2)}
+            <span className="precio-sufijo"> c/u</span>
+          </p>
         )}
 
         <div className="selector-cantidad">
@@ -267,6 +312,9 @@ export function App() {
   const [avisoErp, setAvisoErp] = useState(null);
   const [categoriaActiva, setCategoriaActiva] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
+  // Solo una tarjeta puede tener la tabla de tarifas abierta a la vez —
+  // guardar el id acá (no un booleano por tarjeta) es lo que lo garantiza.
+  const [tarifaAbiertaId, setTarifaAbiertaId] = useState(null);
 
   useEffect(() => {
     getProductos()
@@ -288,6 +336,11 @@ export function App() {
       return coincideCategoria && coincideBusqueda;
     });
   }, [productos, categoriaActiva, busqueda]);
+
+  // Cantidad ya acumulada por categoría (solo las que tienen escala propia)
+  // dentro del carrito actual — se le pasa a cada tarjeta para que su vista
+  // previa de precio/subtotal sea honesta (ver precioUnitarioLinea).
+  const acumuladoPorCategoriaEnCarrito = useMemo(() => acumularPorCategoria(carrito), [carrito]);
 
   // Si el producto ya está en el carrito, suma a esa línea en vez de crear
   // una duplicada — un mismo diseño con distintas cantidades agregadas
@@ -312,18 +365,40 @@ export function App() {
     setCarrito((prev) => prev.filter((linea) => linea.clave !== clave));
   }
 
-  const lineasConSubtotal = useMemo(
-    () =>
-      carrito.map((l) => {
-        const cantidad = Number(l.cantidad) || 0;
-        const unitario = precioUnitario(l.producto, cantidad);
-        return { ...l, cantidad, unitario, subtotal: unitario * cantidad };
-      }),
-    [carrito]
-  );
+  // Precio por línea: para categorías con escala propia (ver pricing.js) el
+  // precio unitario es el mismo para TODAS las líneas de esa categoría,
+  // calculado sobre la cantidad total acumulada — no por línea individual.
+  // Cambiar la cantidad de cualquier pañoleta recalcula automáticamente el
+  // precio de todas las demás pañoletas (este memo depende de `carrito`
+  // completo, así que cualquier cambio dispara el recálculo).
+  const lineasConSubtotal = useMemo(() => {
+    const acumulado = acumularPorCategoria(carrito);
+    return carrito.map((l) => {
+      const cantidad = Number(l.cantidad) || 0;
+      const unitario = precioUnitarioLinea(l.producto, cantidad, acumulado[l.producto.categoria]);
+      return { ...l, cantidad, unitario, subtotal: unitario * cantidad };
+    });
+  }, [carrito]);
 
   const total = useMemo(() => lineasConSubtotal.reduce((suma, l) => suma + l.subtotal, 0), [lineasConSubtotal]);
   const cantidadTotal = useMemo(() => lineasConSubtotal.reduce((n, l) => n + l.cantidad, 0), [lineasConSubtotal]);
+
+  // Resumen por categoría (para el bloque del carrito y el mensaje de
+  // WhatsApp): cuántas unidades de esa categoría hay en total, qué escalón
+  // alcanzaron y cuánto suma esa categoría sola. Recorre ESCALAS_POR_CATEGORIA
+  // (no una lista fija) — cuando otra categoría tenga su propia escala,
+  // aparece acá sola.
+  const resumenCategorias = useMemo(() => {
+    const acumulado = acumularPorCategoria(carrito);
+    return Object.keys(ESCALAS_POR_CATEGORIA)
+      .map((categoria) => {
+        const cantidad = acumulado[categoria] || 0;
+        if (cantidad <= 0) return null;
+        const escalon = escalonAplicable(categoria, cantidad);
+        return { categoria, cantidad, escalon, subtotal: escalon.precioUnitario * cantidad };
+      })
+      .filter(Boolean);
+  }, [carrito]);
 
   // El catálogo NUNCA debe quedar bloqueado por un error de conexión: se
   // arma y abre el link de WhatsApp siempre, y el intento de crear la
@@ -333,7 +408,7 @@ export function App() {
     e.preventDefault();
     setEnviando(true);
 
-    const link = armarLinkWhatsApp({ cliente, lineas: lineasConSubtotal, total });
+    const link = armarLinkWhatsApp({ cliente, lineas: lineasConSubtotal, total, resumenCategorias });
     setLinkWhatsApp(link);
 
     intentarCrearSolicitudEnERP({
@@ -409,7 +484,14 @@ export function App() {
           {cargando && <p>Cargando catálogo...</p>}
           <div className="grilla-productos" id="grilla-productos">
             {productosFiltrados.map((p) => (
-              <ProductoCard key={p.id} producto={p} onAgregar={agregarAlCarrito} />
+              <ProductoCard
+                key={p.id}
+                producto={p}
+                onAgregar={agregarAlCarrito}
+                acumuladoCategoriaActual={acumuladoPorCategoriaEnCarrito[p.categoria]}
+                tarifaAbierta={tarifaAbiertaId === p.id}
+                onToggleTarifa={() => setTarifaAbiertaId((actual) => (actual === p.id ? null : p.id))}
+              />
             ))}
           </div>
           {!cargando && productos.length === 0 && <p>Todavía no hay productos publicados en el catálogo.</p>}
@@ -446,6 +528,28 @@ export function App() {
               </div>
             </div>
           ))}
+
+          {resumenCategorias.length > 0 && (
+            <div className="resumen-categorias">
+              {resumenCategorias.map((r) => (
+                <div className="resumen-categoria" key={r.categoria}>
+                  <p>
+                    <strong>{r.categoria} en el pedido:</strong> {r.cantidad}
+                  </p>
+                  <p>
+                    <strong>Tarifa aplicada:</strong> Desde {r.escalon.cantidadMinima}{" "}
+                    {r.escalon.cantidadMinima === 1 ? "unidad" : "unidades"}
+                  </p>
+                  <p>
+                    <strong>Precio por unidad:</strong> ${r.escalon.precioUnitario.toFixed(2)}
+                  </p>
+                  <p>
+                    <strong>Subtotal de {r.categoria}:</strong> ${r.subtotal.toFixed(2)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
 
           {carrito.length > 0 && (
             <>
