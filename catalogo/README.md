@@ -36,9 +36,12 @@ Para agregar un diseño: copiar un bloque, pegarlo antes del `];` y completar lo
 
 Carpeta exacta: **`catalogo/public/productos/`**. El nombre del archivo tiene que ser idéntico al que pusiste en el campo `imagen` de ese producto en `productos.js` (mayúsculas/minúsculas incluidas). Si usás `.png` en vez de `.jpg`, el nombre en `imagen` tiene que terminar en `.png` también.
 
-## Logo de marca
+## Logo y foto del hero
 
-Poner el archivo del logo en **`catalogo/public/logo-panaprice.png`** — aparece solo en el encabezado, sin tocar código. Mientras no exista ese archivo, se muestra un wordmark de texto ("PANAPRICE — CUSTOM —") como respaldo automático.
+- Logo: **`catalogo/public/logo-panaprice.png`** — aparece solo en el encabezado y en el hero, sin tocar código. Mientras no exista, se muestra un wordmark de texto ("PANAPRICE — CUSTOM —") como respaldo automático.
+- Foto del hero: **`catalogo/public/hero-produccion.jpg`** — foto grande de producción/planta/proceso (no un producto suelto) que acompaña el titular "FABRICAMOS IDEAS." Mientras no exista, el hero se apoya solo en tipografía (nunca un fondo decorativo de relleno).
+
+Ninguna de las dos requiere redeploy de código para actualizarse *después* del primer despliegue con el archivo — pero si el archivo nunca se subió, sí hace falta un `vercel --prod` para publicarlo la primera vez (los archivos de `public/` se empaquetan en el build).
 
 ## Desplegar (Vercel, sin repositorio Git remoto)
 
@@ -76,23 +79,21 @@ CNAME) que da Vercel.
    cliente, teléfono, ubicación, código, nombre, cantidad, precio y total.
 6. Confirmar que se ve bien sin hacer zoom ni scroll horizontal.
 
-## Deuda técnica conocida (MVP de emergencia, 2026-07-27)
+## Estado actual (actualizado 2026-07-29)
 
-- **`codigo` no existe en el modelo `Producto` de Supabase todavía.** En
-  modo local vive directamente en `data/productos.js`; en modo API se
-  genera cortando el UUID (`src/api.js`, función `conCodigo`). Cuando se
-  migre el catálogo a Supabase en serio, agregar la columna real.
-- **`ubicacion` no es un campo de `SolicitudPedido` en el backend.** El
+- El backend (`server/`, desplegado en `panaprice-server.vercel.app`) SÍ
+  está público — `VITE_DATA_SOURCE=api` en producción lee productos reales
+  de Supabase, administrados desde `/productos` en el ERP. `codigo` es una
+  columna real del modelo `Producto` (ya no se inventa cortando el UUID).
+- **`ubicacion` sigue sin ser un campo propio de `SolicitudPedido`** — el
   intento best-effort de registrar la solicitud en el ERP la manda dentro
   de `notasPersonalizacion` (ver `handleEnviarPedido` en `src/App.jsx`).
-  Si se decide que ubicación merece su propio campo, agregarlo al modelo.
-- **El registro en el ERP es best-effort y no bloqueante a propósito.** Las
-  tablas de Supabase ya están migradas y `CATALOGO_EMPRESA_ID` configurado,
-  pero el backend (`server/`) todavía no está desplegado públicamente
-  (pausado a propósito el 2026-07-27 para no bloquear el lanzamiento del
-  catálogo) — hasta que se despliegue, ese intento siempre falla en
-  silencio y el pedido por WhatsApp sigue siendo la única vía real.
-- **Verificado visualmente** (Playwright, desktop 1280px + mobile 390px,
-  sin errores de consola) el 2026-07-27 tras el pulido de diseño — grilla,
-  carrito, checkout y botón flotante de WhatsApp se ven y funcionan bien en
-  ambos tamaños.
+- Tarifa por volumen: para productos de la categoría "Pañoletas" el precio
+  se calcula por una escala única definida en `src/pricing.js`
+  (`ESCALAS_POR_CATEGORIA`), acumulada sobre el total del carrito — no por
+  producto individual. Ver comentarios en ese archivo antes de tocar precios.
+- Identidad visual (2026-07-29): paleta blanco/negro/azul institucional
+  (`#1146FF`) + azul oscuro/gris claro, naranja reservado únicamente para
+  botones de acción de venta (Agregar al pedido / Cotizar / Enviar
+  pedido). Tipografía Montserrat (cargada por Google Fonts en
+  `index.html`). Ver variables en `src/index.css` (`:root`).

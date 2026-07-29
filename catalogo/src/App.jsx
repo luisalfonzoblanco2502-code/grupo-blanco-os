@@ -41,22 +41,21 @@ const BADGES_DEMO = {
 };
 // ============================================================================
 
+// Sin emoji a propósito — la nueva identidad visual pide iconografía
+// mínima y nada "caricaturesco" (ver sprint de branding); el texto solo
+// alcanza para transmitir el mensaje sin restarle seriedad a la tarjeta.
 const BADGE_CONFIG = {
-  nuevo: { emoji: "✨", texto: "NUEVO" },
-  tendencia: { emoji: "🔥", texto: "TENDENCIA" },
-  mas_vendido: { emoji: "⭐", texto: "MÁS VENDIDO" },
-  oferta: { emoji: "🎁", texto: "OFERTA" },
-  edicion_limitada: { emoji: "💎", texto: "EDICIÓN LIMITADA" },
+  nuevo: { texto: "NUEVO" },
+  tendencia: { texto: "TENDENCIA" },
+  mas_vendido: { texto: "MÁS VENDIDO" },
+  oferta: { texto: "OFERTA" },
+  edicion_limitada: { texto: "EDICIÓN LIMITADA" },
 };
 
 function BadgeProducto({ tipo }) {
   const config = BADGE_CONFIG[tipo];
   if (!config) return null;
-  return (
-    <span className={`badge-producto badge-producto-${tipo}`}>
-      {config.emoji} {config.texto}
-    </span>
-  );
+  return <span className={`badge-producto badge-producto-${tipo}`}>{config.texto}</span>;
 }
 
 // Logo real opcional: si catalogo/public/logo-panaprice.png existe, se usa;
@@ -101,6 +100,23 @@ function BotonWhatsAppFlotante() {
   );
 }
 
+// Foto de producción opcional: mismo patrón que LogoPanaprice — si
+// catalogo/public/hero-produccion.jpg no existe todavía, el hero se apoya
+// solo en tipografía/espacio (nunca un fondo decorativo de relleno). Poner
+// el archivo ahí la activa sin tocar código.
+function FotoHero() {
+  const [error, setError] = useState(false);
+  if (error) return null;
+  return (
+    <img
+      src="/hero-produccion.jpg"
+      alt="Producción textil personalizada en planta Panaprice"
+      className="hero-foto"
+      onError={() => setError(true)}
+    />
+  );
+}
+
 // Hero superior — solo presentación/CTAs, no toca datos ni carrito. "Ver
 // catálogo" es un ancla pura (#grilla-productos, scroll suave por CSS);
 // "Cotizar por WhatsApp" reutiliza el mismo link genérico del botón
@@ -109,18 +125,27 @@ function Hero() {
   const linkWhatsApp = armarLinkWhatsAppGenerico();
   return (
     <section className="hero">
-      <LogoPanaprice grande />
-      <h1 className="hero-titulo">Catálogo de Pañoletas Personalizadas</h1>
-      <p className="hero-subtitulo">Seda importada • Personalización • Producción nacional</p>
-      <div className="hero-botones">
-        <a className="btn-primary" href="#grilla-productos">
-          Ver catálogo
-        </a>
-        {linkWhatsApp && (
-          <a className="btn-secundario" href={linkWhatsApp} target="_blank" rel="noreferrer">
-            Cotizar por WhatsApp
+      <div className="hero-texto">
+        <p className="eyebrow">Fábrica de personalización textil</p>
+        <h1 className="hero-titulo">
+          FABRICAMOS IDEAS.
+          <span>Construimos marcas.</span>
+        </h1>
+        <p className="hero-subtitulo">Producción personalizada desde una unidad.</p>
+        <p className="hero-categorias">Pañoletas · Franelas · Chemises · Merchandising</p>
+        <div className="hero-botones">
+          <a className="btn-hero" href="#grilla-productos">
+            Ver catálogo
           </a>
-        )}
+          {linkWhatsApp && (
+            <a className="btn-secundario" href={linkWhatsApp} target="_blank" rel="noreferrer">
+              Cotizar por WhatsApp
+            </a>
+          )}
+        </div>
+      </div>
+      <div className="hero-imagen-wrap">
+        <FotoHero />
       </div>
     </section>
   );
@@ -167,22 +192,81 @@ function Buscador({ valor, onChange }) {
   );
 }
 
-const BENEFICIOS = [
-  "Seda importada",
-  "Personalización",
-  "Producción nacional",
-  "Envíos nacionales",
+// Iconografía mínima a propósito: trazo simple (currentColor, sin relleno),
+// nada ilustrativo ni caricaturesco — son marcas de apoyo al texto, no
+// protagonistas.
+function IconoLinea({ children }) {
+  return (
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+const ICONOS_PORQUE = {
+  produccion: (
+    <IconoLinea>
+      <path d="M3 20h18M5 20V9l4 3V9l4 3V9l4 3v8" />
+      <path d="M5 20V9" />
+    </IconoLinea>
+  ),
+  calidad: (
+    <IconoLinea>
+      <circle cx="12" cy="9" r="5.5" />
+      <path d="M9 13.5 7.5 21 12 18.5 16.5 21 15 13.5" />
+    </IconoLinea>
+  ),
+  personalizacion: (
+    <IconoLinea>
+      <path d="M4 20l1-4.2L15.8 5 19 8.2 8.2 19 4 20Z" />
+      <path d="M13 7l4 4" />
+    </IconoLinea>
+  ),
+  envios: (
+    <IconoLinea>
+      <rect x="3" y="7" width="11" height="9" rx="1" />
+      <path d="M14 10h3.5L20 13v3h-6" />
+      <circle cx="7.5" cy="18" r="1.6" />
+      <circle cx="16.5" cy="18" r="1.6" />
+    </IconoLinea>
+  ),
+  atencion: (
+    <IconoLinea>
+      <path d="M4 5h16v10H9l-4 3.5V15H4Z" />
+    </IconoLinea>
+  ),
+  tiempo: (
+    <IconoLinea>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </IconoLinea>
+  ),
+};
+
+const PORQUE_ITEMS = [
+  { icono: "produccion", titulo: "Producción propia", texto: "Fabricamos en nuestras propias instalaciones, sin intermediarios." },
+  { icono: "calidad", titulo: "Calidad Premium", texto: "Materiales e insumos seleccionados en cada proceso." },
+  { icono: "personalizacion", titulo: "Personalización total", texto: "Diseños a medida, desde una unidad hasta grandes volúmenes." },
+  { icono: "envios", titulo: "Envíos nacionales", texto: "Hacemos llegar tu pedido a cualquier punto del país." },
+  { icono: "atencion", titulo: "Atención personalizada", texto: "Un equipo real acompaña cada pedido, de inicio a fin." },
+  { icono: "tiempo", titulo: "Tiempo de producción", texto: "Procesos ordenados que cuidan cada fecha de entrega." },
 ];
 
-function BarraBeneficios() {
+function PorQuePanaprice() {
   return (
-    <ul className="barra-beneficios">
-      {BENEFICIOS.map((b) => (
-        <li key={b}>
-          <span className="beneficio-check" aria-hidden="true">✓</span> {b}
-        </li>
-      ))}
-    </ul>
+    <section className="seccion-porque">
+      <p className="eyebrow">¿Por qué Panaprice?</p>
+      <h2 className="seccion-titulo">Una fábrica, no un intermediario</h2>
+      <div className="porque-grid">
+        {PORQUE_ITEMS.map((item) => (
+          <div className="porque-item" key={item.icono}>
+            <div className="porque-icono">{ICONOS_PORQUE[item.icono]}</div>
+            <h3>{item.titulo}</h3>
+            <p>{item.texto}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -250,9 +334,8 @@ function ProductoCard({ producto, onAgregar, acumuladoCategoriaActual, tarifaAbi
               Desde ${escala[escala.length - 1].precioUnitario.toFixed(2)}
               <span className="precio-sufijo"> c/u</span>
             </p>
-            <p className="producto-precio-base">1 unidad: ${escala[0].precioUnitario.toFixed(2)}</p>
             <button type="button" className="link-tarifas" onClick={onToggleTarifa} aria-expanded={tarifaAbierta}>
-              Ver tarifas por cantidad {tarifaAbierta ? "▲" : "▼"}
+              Ver tabla de producción {tarifaAbierta ? "▲" : "▼"}
             </button>
             {tarifaAbierta && (
               <table className="tabla-tarifas">
@@ -472,7 +555,7 @@ export function App() {
       {vista === "catalogo" && (
         <main>
           <Hero />
-          <BarraBeneficios />
+          <PorQuePanaprice />
           <div className="controles-catalogo">
             <BarraCategorias
               productos={productos}
