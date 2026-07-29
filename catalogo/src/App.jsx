@@ -1,16 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getProductos, intentarCrearSolicitudEnERP, armarLinkWhatsApp, armarLinkWhatsAppGenerico } from "./api";
+import {
+  getProductos,
+  intentarCrearSolicitudEnERP,
+  armarLinkWhatsApp,
+  armarLinkWhatsAppGenerico,
+  consultarRastreo,
+} from "./api";
 
 // Vive acá (no en pdf.js) a propósito: pdf.js importa jsPDF, una librería
 // pesada (~200KB gzip) que NO debe entrar al bundle inicial del catálogo
-// (prioridad #1 de este sprint: velocidad mobile-first) — se carga con
-// import() dinámico recién cuando el cliente confirma el pedido, ver
-// handleEnviarPedido. Este número, en cambio, no depende de jsPDF y hace
-// falta antes (para el mensaje de WhatsApp), así que se queda liviano acá.
-function numeroOrdenBorrador() {
+// (prioridad #1 del sprint mobile-first) — se carga con import() dinámico
+// recién cuando el cliente confirma el pedido, ver handleEnviarPedido. Este
+// número, en cambio, no depende de jsPDF y hace falta antes (para el
+// mensaje de WhatsApp), así que se queda liviano acá.
+//
+// SOLO se usa como respaldo si intentarCrearSolicitudEnERP falla (ver
+// handleEnviarPedido): el número "oficial" es el que genera el backend
+// (secuencial real, PP-2026-000154) al guardar la solicitud. Este de acá es
+// un identificador de referencia para que el pedido nunca se quede sin
+// número aunque el guardado falle — no es secuencial ni consultable en
+// "Rastrea tu pedido".
+function numeroOrdenLocal() {
   const ahora = new Date();
   const pad = (n) => String(n).padStart(2, "0");
-  return `BP-${ahora.getFullYear()}${pad(ahora.getMonth() + 1)}${pad(ahora.getDate())}-${pad(ahora.getHours())}${pad(ahora.getMinutes())}${pad(ahora.getSeconds())}`;
+  return `PP-${ahora.getFullYear()}-${pad(ahora.getHours())}${pad(ahora.getMinutes())}${pad(ahora.getSeconds())}`;
 }
 import {
   ESCALAS_POR_CATEGORIA,
@@ -19,6 +32,8 @@ import {
   precioUnitarioPorCategoria,
   acumularPorCategoria,
   estadoMotivacion,
+  iconoCategoria,
+  TIPOS_PRODUCTO_PERSONALIZABLE,
 } from "./pricing";
 
 // Fallback para categorías SIN escala unificada (ver pricing.js): mismo
@@ -223,36 +238,35 @@ function Buscador({ valor, onChange }) {
   );
 }
 
-// Banner de motivación de compra — una sola vez por categoría con escala
-// (no por tarjeta: la tarjeta se mantiene mínima a propósito, ver
-// ProductoCard). Se recalcula solo de `estadoMotivacion`, que ya depende
-// del carrito completo — reactivo automáticamente a cualquier cambio de
-// cantidad, sin lógica propia acá.
-function MotivacionCompra({ categoria, cantidad }) {
+// Asistente Comercial — parte del carrito, no un módulo aparte (ver el
+// orden Productos → Resumen → Asistente Comercial → Botón en la vista de
+// checkout). Una sola vez por categoría con escala. Se recalcula solo de
+// `estadoMotivacion`, que ya depende del carrito completo — reactivo
+// automáticamente a cualquier cambio de cantidad, sin lógica propia acá.
+function AsistenteComercial({ categoria, cantidad, onVerMasDisenos }) {
   const estado = estadoMotivacion(categoria, cantidad);
   if (!estado) return null;
 
   return (
-    <div className="motivacion" role="status">
-      <p className="motivacion-mensaje">
+    <div className="asistente-comercial" role="status">
+      <p className="asistente-eyebrow">Asistente Comercial</p>
+      <p className="asistente-mensaje">
         {estado.mensaje.emoji && <span aria-hidden="true">{estado.mensaje.emoji} </span>}
         {estado.mensaje.texto}
       </p>
       {estado.siguiente && (
         <>
-          <div className="motivacion-barra">
-            <div className="motivacion-barra-relleno" style={{ width: `${estado.progreso}%` }} />
+          <div className="asistente-barra">
+            <div className="asistente-barra-relleno" style={{ width: `${estado.progreso}%` }} />
           </div>
-          <p className="motivacion-detalle">
-            Te faltan <strong>{estado.siguiente.cantidadMinima - cantidad}</strong> para $
-            {estado.siguiente.precioUnitario.toFixed(2)} c/u
-            {estado.ahorro > 0 && (
-              <>
-                {" "}
-                · Ahorro estimado: <strong>${estado.ahorro.toFixed(2)}</strong>
-              </>
-            )}
-          </p>
+          {estado.ahorro > 0 && (
+            <p className="asistente-detalle">
+              Ahorro estimado: <strong>${estado.ahorro.toFixed(2)}</strong>
+            </p>
+          )}
+          <button type="button" className="btn-ver-mas-disenos" onClick={onVerMasDisenos}>
+            ➜ Ver más diseños
+          </button>
         </>
       )}
     </div>
@@ -334,6 +348,315 @@ function PorQuePanaprice() {
         ))}
       </div>
     </section>
+  );
+}
+
+function crearDisenoVacio() {
+  return {
+    id: `d-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    archivo: null,
+    previewUrl: null,
+    nombreArchivo: "",
+    cantidad: 1,
+    producto: TIPOS_PRODUCTO_PERSONALIZABLE[0],
+    observaciones: "",
+  };
+}
+
+// Una tarjeta por diseño en edición — sube su propio archivo, no un
+// formulario compartido. "Agregar al pedido" solo se habilita cuando tiene
+// archivo + cantidad + producto, igual que una tarjeta de catálogo normal.
+function DisenoPersonalizadoCard({ diseno, onActualizar, onArchivo, onQuitar, onAgregar }) {
+  const listo = Boolean(diseno.archivo) && diseno.cantidad > 0 && diseno.producto;
+  return (
+    <div className="diseno-card">
+      <div className="diseno-imagen-wrap">
+        {diseno.previewUrl ? (
+          <img src={diseno.previewUrl} alt={diseno.nombreArchivo} className="diseno-miniatura" />
+        ) : (
+          <label className="diseno-subir">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => onArchivo(e.target.files?.[0] ?? null)}
+              hidden
+            />
+            <span aria-hidden="true">📁</span>
+            <span>Subir imagen</span>
+          </label>
+        )}
+      </div>
+      <div className="diseno-cuerpo">
+        {diseno.nombreArchivo && <p className="diseno-nombre-archivo">{diseno.nombreArchivo}</p>}
+        <label className="diseno-campo">
+          Cantidad
+          <input
+            type="number"
+            min={1}
+            value={diseno.cantidad}
+            onChange={(e) => onActualizar({ cantidad: Math.max(1, Number(e.target.value) || 1) })}
+          />
+        </label>
+        <label className="diseno-campo">
+          Producto
+          <select value={diseno.producto} onChange={(e) => onActualizar({ producto: e.target.value })}>
+            {TIPOS_PRODUCTO_PERSONALIZABLE.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="diseno-campo">
+          Observaciones
+          <textarea
+            placeholder="Tallas, colores, ubicación del logo, detalles..."
+            value={diseno.observaciones}
+            onChange={(e) => onActualizar({ observaciones: e.target.value })}
+            rows={2}
+          />
+        </label>
+        <div className="diseno-acciones">
+          {onQuitar && (
+            <button type="button" className="btn-eliminar" onClick={onQuitar}>
+              🗑 Eliminar
+            </button>
+          )}
+          <button type="button" className="btn-primary" disabled={!listo} onClick={onAgregar}>
+            Agregar al pedido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Se siente como otra forma de comprar, no un formulario — el cliente sube
+// tantos diseños como quiera (sin límite) y cada uno se agrega al MISMO
+// carrito que los productos de catálogo (ver agregarDisenoAlCarrito en
+// App()). El precio de estos productos es "a cotizar": no hay tarifa fija
+// para un diseño propio, se confirma por WhatsApp como siempre.
+function PersonalizaTusDisenos({ onAgregarDiseno }) {
+  const [disenos, setDisenos] = useState(() => [crearDisenoVacio()]);
+
+  function actualizar(id, cambios) {
+    setDisenos((prev) => prev.map((d) => (d.id === id ? { ...d, ...cambios } : d)));
+  }
+
+  function manejarArchivo(id, archivo) {
+    if (!archivo) return;
+    const previewUrl = URL.createObjectURL(archivo);
+    actualizar(id, { archivo, previewUrl, nombreArchivo: archivo.name });
+  }
+
+  function agregarFila() {
+    setDisenos((prev) => [...prev, crearDisenoVacio()]);
+  }
+
+  function quitarFila(id) {
+    setDisenos((prev) => {
+      const fila = prev.find((d) => d.id === id);
+      if (fila?.previewUrl) URL.revokeObjectURL(fila.previewUrl);
+      return prev.filter((d) => d.id !== id);
+    });
+  }
+
+  function handleAgregar(diseno) {
+    onAgregarDiseno(diseno);
+    // Reemplaza esa fila por una nueva vacía — no deja un hueco ni permite
+    // agregarla dos veces sin querer.
+    setDisenos((prev) => prev.map((d) => (d.id === diseno.id ? crearDisenoVacio() : d)));
+  }
+
+  return (
+    <section className="seccion-personaliza" id="personaliza-tus-disenos">
+      <p className="eyebrow">Personaliza tus diseños</p>
+      <h2 className="seccion-titulo">Sube tus propios archivos para fabricar exactamente lo que necesitas.</h2>
+      <div className="disenos-lista">
+        {disenos.map((d) => (
+          <DisenoPersonalizadoCard
+            key={d.id}
+            diseno={d}
+            onActualizar={(cambios) => actualizar(d.id, cambios)}
+            onArchivo={(archivo) => manejarArchivo(d.id, archivo)}
+            onQuitar={disenos.length > 1 ? () => quitarFila(d.id) : null}
+            onAgregar={() => handleAgregar(d)}
+          />
+        ))}
+      </div>
+      <button type="button" className="btn-agregar-diseno" onClick={agregarFila}>
+        ➕ Agregar otro diseño
+      </button>
+    </section>
+  );
+}
+
+// Estados públicos de producción/entrega — mismo orden y copy que
+// ETAPAS_PUBLICAS en server/src/services/solicitudes.service.js (frontend y
+// backend son apps separadas, sin imports compartidos en este monorepo,
+// así que se duplica intencionalmente acá; si cambia uno, revisar el otro).
+const ETAPAS_INFO = {
+  RECIBIDO: {
+    emoji: "✅",
+    titulo: "Pedido recibido",
+    texto: "Tu pedido fue recibido correctamente y está siendo validado por nuestro equipo.",
+  },
+  PRODUCCION_INICIO: {
+    emoji: "🖨",
+    titulo: "Inicio de producción",
+    texto: "Tu pedido ya ingresó a producción. Nuestro equipo comenzó el proceso de fabricación.",
+  },
+  PRODUCCION_FIN: {
+    emoji: "✅",
+    titulo: "Fin de producción",
+    texto: "La fabricación terminó correctamente. Ahora inicia el proceso de revisión y preparación.",
+  },
+  PREPARANDO_ENVIO: {
+    emoji: "📦",
+    titulo: "Preparando envío",
+    texto: "Estamos preparando cuidadosamente tu pedido para el despacho o retiro.",
+  },
+  LISTO_RETIRO: {
+    emoji: "🏪",
+    titulo: "Listo para retiro",
+    texto: "Tu pedido ya puede ser retirado en nuestras instalaciones.",
+  },
+  ENVIADO: {
+    emoji: "🚚",
+    titulo: "Enviado",
+    texto: "Tu pedido ya salió de nuestras instalaciones y va camino hacia tu ciudad.",
+  },
+  DISPONIBLE_RETIRO: {
+    emoji: "📍",
+    titulo: "Disponible para retirar",
+    texto: (agencia) => `Tu pedido ya se encuentra disponible para retiro en la agencia de ${agencia || "tu ciudad"}.`,
+  },
+  ENTREGADO: {
+    emoji: "🎉",
+    titulo: "Pedido entregado",
+    texto: "Tu pedido fue retirado correctamente. Gracias por confiar en Panaprice. Esperamos volver a fabricar para ti muy pronto.",
+  },
+};
+
+// LISTO_RETIRO y ENVIADO/DISPONIBLE_RETIRO son ramas alternativas según
+// tipoEntrega, no una secuencia única — ver nota en schema.prisma.
+function secuenciaParaTipoEntrega(tipoEntrega) {
+  const base = ["RECIBIDO", "PRODUCCION_INICIO", "PRODUCCION_FIN", "PREPARANDO_ENVIO"];
+  if (tipoEntrega === "ENVIO") return [...base, "ENVIADO", "DISPONIBLE_RETIRO", "ENTREGADO"];
+  return [...base, "LISTO_RETIRO", "ENTREGADO"];
+}
+
+// "Rastrea tu pedido" — timeline visual del estado real (ver
+// GET /api/publico/rastreo/:numeroOrden). valorInicial llega prefilled
+// desde el QR del PDF (?orden=...) o desde el botón de la confirmación —
+// en ambos casos se autoconsulta al montar.
+function RastreaTuPedido({ valorInicial }) {
+  const [numero, setNumero] = useState(valorInicial || "");
+  const [consultando, setConsultando] = useState(false);
+  const [resultado, setResultado] = useState(null);
+  const [buscado, setBuscado] = useState(false);
+
+  async function consultar(e) {
+    e?.preventDefault();
+    if (!numero.trim()) return;
+    setConsultando(true);
+    setBuscado(true);
+    const r = await consultarRastreo(numero.trim());
+    setResultado(r);
+    setConsultando(false);
+  }
+
+  useEffect(() => {
+    if (valorInicial) consultar();
+    // Solo al montar (o cuando cambia valorInicial vía key en App()) — no
+    // en cada tecleo del input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valorInicial]);
+
+  const secuencia = resultado?.ok ? secuenciaParaTipoEntrega(resultado.tipoEntrega) : [];
+  const indiceActual = secuencia.indexOf(resultado?.estadoPublico);
+
+  return (
+    <section className="seccion-rastreo" id="rastreo">
+      <p className="eyebrow">Rastrea tu pedido</p>
+      <h2 className="seccion-titulo">¿Dónde está tu pedido?</h2>
+      <form className="form-rastreo" onSubmit={consultar}>
+        <input
+          type="text"
+          placeholder="Ej. PP-2026-000154"
+          value={numero}
+          onChange={(e) => setNumero(e.target.value)}
+          aria-label="Número de orden"
+        />
+        <button type="submit" className="btn-primary" disabled={consultando}>
+          {consultando ? "Buscando..." : "Consultar"}
+        </button>
+      </form>
+
+      {buscado && !consultando && resultado && !resultado.ok && (
+        <p className="rastreo-no-encontrado">
+          No encontramos un pedido con ese número. Revisá que esté bien escrito, o escribinos por
+          WhatsApp si acabás de hacer tu pedido — puede tardar unos minutos en aparecer.
+        </p>
+      )}
+
+      {resultado?.ok && (
+        <div className="rastreo-timeline">
+          <p className="rastreo-numero">Pedido {resultado.numeroOrden}</p>
+          {secuencia.map((clave, i) => {
+            const info = ETAPAS_INFO[clave];
+            const estado = i < indiceActual ? "completado" : i === indiceActual ? "actual" : "pendiente";
+            const texto = typeof info.texto === "function" ? info.texto(resultado.agenciaEnvio) : info.texto;
+            return (
+              <div className={`rastreo-paso rastreo-paso-${estado}`} key={clave}>
+                <div className="rastreo-paso-icono" aria-hidden="true">
+                  {info.emoji}
+                </div>
+                <div className="rastreo-paso-cuerpo">
+                  <h3>{info.titulo}</h3>
+                  <p>{texto}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// "Tu pedido incluye: 🧣 12 Pañoletas · 👕 6 Franelas · 🎨 3 Diseños
+// personalizados" — resumen visual antes de enviar (punto 10 del sprint
+// "experiencia de compra"). Agrupa TODOS los diseños personalizados bajo
+// una sola etiqueta (sin importar su tipo de producto elegido) porque así
+// es como el cliente los piensa: "mis diseños", no por categoría suelta.
+function ResumenVisualPedido({ lineas }) {
+  const grupos = useMemo(() => {
+    const mapa = new Map();
+    for (const l of lineas) {
+      const esPersonalizado = l.tipo === "personalizado";
+      const etiqueta = esPersonalizado ? "Diseños personalizados" : l.producto.categoria || "Productos";
+      const emoji = iconoCategoria(esPersonalizado ? "personalizado" : l.producto.categoria);
+      const actual = mapa.get(etiqueta) || { emoji, cantidad: 0 };
+      actual.cantidad += l.cantidad;
+      mapa.set(etiqueta, actual);
+    }
+    return [...mapa.entries()].map(([etiqueta, v]) => ({ etiqueta, ...v }));
+  }, [lineas]);
+
+  if (grupos.length === 0) return null;
+
+  return (
+    <div className="resumen-visual">
+      <p className="resumen-visual-titulo">Tu pedido incluye:</p>
+      <ul className="resumen-visual-lista">
+        {grupos.map((g) => (
+          <li key={g.etiqueta}>
+            <span aria-hidden="true">{g.emoji}</span> {g.cantidad} {g.etiqueta}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -457,22 +780,44 @@ function ProductoCard({ producto, onAgregar, acumuladoCategoriaActual, tarifaAbi
   );
 }
 
+// Lee ?orden=... de la URL una sola vez al cargar — es como llega el
+// cliente que escaneó el QR del PDF (ver pdf.js) directo a "Rastrea tu
+// pedido" con el número ya cargado.
+function ordenDesdeUrl() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("orden") || "";
+}
+
 export function App() {
   const [productos, setProductos] = useState([]);
   const [cargando, setCargando] = useState(true);
-  const [carrito, setCarrito] = useState([]); // [{ clave, producto, cantidad, disenoNotas }]
+  const [carrito, setCarrito] = useState([]); // [{ clave, producto, cantidad, disenoNotas, tipo }]
   const [vista, setVista] = useState("catalogo"); // catalogo | checkout | confirmacion
-  const [cliente, setCliente] = useState({ nombre: "", telefono: "", ubicacion: "" });
+  const [cliente, setCliente] = useState({ nombre: "", telefono: "", ubicacion: "", tipoEntrega: "" });
   const [enviando, setEnviando] = useState(false);
+  const [pasoEnvio, setPasoEnvio] = useState(null);
   const [linkWhatsApp, setLinkWhatsApp] = useState(null);
   const [avisoErp, setAvisoErp] = useState(null);
   const [numeroOrden, setNumeroOrden] = useState(null);
+  const [numeroOrdenRastreable, setNumeroOrdenRastreable] = useState(false);
   const [pdfInfo, setPdfInfo] = useState(null);
   const [categoriaActiva, setCategoriaActiva] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
   // Solo una tarjeta puede tener la tabla de tarifas abierta a la vez —
   // guardar el id acá (no un booleano por tarjeta) es lo que lo garantiza.
   const [tarifaAbiertaId, setTarifaAbiertaId] = useState(null);
+  // Número que "Rastrea tu pedido" debe autoconsultar — llega del QR del
+  // PDF (?orden=...) o del botón en la pantalla de confirmación. Cambiar
+  // este valor se usa como `key` de <RastreaTuPedido> para forzar que
+  // remonte y vuelva a buscar (ver más abajo).
+  const [ordenParaRastrear, setOrdenParaRastrear] = useState(() => ordenDesdeUrl());
+  const seccionRastreoRef = useRef(null);
+
+  useEffect(() => {
+    if (ordenParaRastrear && seccionRastreoRef.current) {
+      seccionRastreoRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [ordenParaRastrear]);
 
   useEffect(() => {
     getProductos()
@@ -505,14 +850,44 @@ export function App() {
   // desde la tarjeta siempre queda como una sola línea.
   function agregarAlCarrito(producto, cantidad) {
     setCarrito((prev) => {
-      const existente = prev.find((l) => l.producto.id === producto.id);
+      const existente = prev.find((l) => l.tipo === "catalogo" && l.producto.id === producto.id);
       if (existente) {
         return prev.map((l) =>
           l.clave === existente.clave ? { ...l, cantidad: l.cantidad + cantidad } : l
         );
       }
-      return [...prev, { clave: `${producto.id}-${Date.now()}`, producto, cantidad, disenoNotas: "" }];
+      return [...prev, { clave: `${producto.id}-${Date.now()}`, producto, cantidad, disenoNotas: "", tipo: "catalogo" }];
     });
+  }
+
+  // Un diseño subido en "Personaliza tus diseños" se agrega al MISMO
+  // carrito que los productos de catálogo (carrito mixto). `categoria`
+  // queda en singular ("Pañoleta", no "Pañoletas") a propósito: así nunca
+  // choca con ESCALAS_POR_CATEGORIA (claves en plural) y no se mezcla sin
+  // querer con la acumulación de precio por volumen del catálogo — un
+  // diseño propio siempre es "a cotizar", nunca hereda una tarifa fija.
+  function agregarDisenoAlCarrito(diseno) {
+    const productoSintetico = {
+      id: `personalizado-${diseno.id}`,
+      codigo: "PERSONALIZADO",
+      nombre: `Diseño personalizado — ${diseno.producto}`,
+      categoria: diseno.producto,
+      imagenUrl: null,
+      precioBase: 0,
+      preciosVolumen: [],
+    };
+    setCarrito((prev) => [
+      ...prev,
+      {
+        clave: `personalizado-${diseno.id}`,
+        producto: productoSintetico,
+        cantidad: diseno.cantidad,
+        disenoNotas: diseno.observaciones,
+        tipo: "personalizado",
+        archivoLocal: diseno.archivo,
+        previewUrl: diseno.previewUrl,
+      },
+    ]);
   }
 
   function actualizarLinea(clave, cambios) {
@@ -520,7 +895,11 @@ export function App() {
   }
 
   function quitarLinea(clave) {
-    setCarrito((prev) => prev.filter((linea) => linea.clave !== clave));
+    setCarrito((prev) => {
+      const linea = prev.find((l) => l.clave === clave);
+      if (linea?.previewUrl) URL.revokeObjectURL(linea.previewUrl);
+      return prev.filter((l) => l.clave !== clave);
+    });
   }
 
   // Precio por línea: para categorías con escala propia (ver pricing.js) el
@@ -572,44 +951,56 @@ export function App() {
       .filter(Boolean);
   }, [carrito]);
 
-  // El catálogo NUNCA debe quedar bloqueado por un error de conexión: se
-  // arma y abre el link de WhatsApp siempre, y el intento de crear la
-  // solicitud en el ERP corre aparte (fire-and-forget) sin que su
-  // resultado condicione el paso a la pantalla de confirmación.
+  // Orden pedida por el negocio: generar PDF, guardar borrador (que es lo
+  // mismo que generar el número de orden real: ambos pasan en la MISMA
+  // llamada a intentarCrearSolicitudEnERP), abrir WhatsApp. Como eso son
+  // dos `await` antes de tener el link final, y un popup solo se libra del
+  // bloqueador si `window.open` pasa DENTRO del gesto síncrono del click,
+  // la pestaña se abre en blanco ACÁ y recién se navega al final
+  // (`ventana.location`) — patrón estándar para popups después de una
+  // operación async. El catálogo NUNCA debe quedar bloqueado por un error
+  // de conexión: si el guardado falla, se sigue con un número de
+  // referencia local (ver numeroOrdenLocal) y el pedido por WhatsApp sale
+  // igual, solo que ese número no será consultable en "Rastrea tu pedido".
   async function handleEnviarPedido(e) {
     e.preventDefault();
     setEnviando(true);
+    setPasoEnvio("Guardando tu pedido...");
 
-    const orden = numeroOrdenBorrador();
-    setNumeroOrden(orden);
+    const ventana = window.open("", "_blank");
 
-    const link = armarLinkWhatsApp({ cliente, lineas: lineasConSubtotal, total, resumenCategorias, numeroOrden: orden });
-    setLinkWhatsApp(link);
+    // crearSolicitudPublica exige productoId real de catálogo — los
+    // diseños personalizados todavía no se sincronizan al ERP (ver nota en
+    // agregarDisenoAlCarrito), así que se excluyen de este envío; igual
+    // viajan completos en el PDF y en el mensaje de WhatsApp.
+    const itemsCatalogo = lineasConSubtotal
+      .filter((l) => l.tipo !== "personalizado")
+      .map((l) => ({ productoId: l.producto.id, cantidad: l.cantidad, disenoNotas: l.disenoNotas || undefined }));
 
-    // El navegador solo deja abrir un popup sin bloquearlo si pasa DENTRO
-    // del mismo gesto síncrono del usuario (este click) — por eso se abre
-    // ACÁ, antes de cualquier `await` (generar el PDF implica esperar
-    // fetch() de las imágenes, y para entonces el navegador ya no lo
-    // consideraría "originado por el usuario"). El pedido por WhatsApp
-    // sigue siendo la vía garantizada aunque el PDF tarde o falle.
-    if (link) window.open(link, "_blank");
+    let ordenFinal = null;
+    let ordenEsReal = false;
+    if (itemsCatalogo.length > 0) {
+      const resultado = await intentarCrearSolicitudEnERP({
+        clienteNombre: cliente.nombre,
+        clienteTelefono: cliente.telefono,
+        notasPersonalizacion: `Ubicación: ${cliente.ubicacion}`,
+        tipoEntrega: cliente.tipoEntrega || undefined,
+        items: itemsCatalogo,
+      });
+      setAvisoErp(resultado);
+      if (resultado.ok && resultado.numeroOrden) {
+        ordenFinal = resultado.numeroOrden;
+        ordenEsReal = true;
+      }
+    } else {
+      setAvisoErp({ ok: false, motivo: "pedido compuesto solo por diseños personalizados: todavía no se registra en el ERP" });
+    }
+    if (!ordenFinal) ordenFinal = numeroOrdenLocal();
+    setNumeroOrden(ordenFinal);
+    setNumeroOrdenRastreable(ordenEsReal);
 
-    intentarCrearSolicitudEnERP({
-      clienteNombre: cliente.nombre,
-      clienteTelefono: cliente.telefono,
-      notasPersonalizacion: `Ubicación: ${cliente.ubicacion}`,
-      items: lineasConSubtotal.map((l) => ({
-        productoId: l.producto.id,
-        cantidad: l.cantidad,
-        disenoNotas: l.disenoNotas || undefined,
-      })),
-    }).then((resultado) => setAvisoErp(resultado));
-
-    // Best-effort también: si el PDF falla (imagen rota, navegador raro, o
-    // el import() dinámico de jsPDF no carga), no debe impedir llegar a la
-    // pantalla de confirmación — el pedido por WhatsApp ya se disparó
-    // arriba de todos modos. import() dinámico a propósito: jsPDF es
-    // pesado y no debe estar en el bundle inicial del catálogo.
+    setPasoEnvio("Generando tu Orden Comercial en PDF...");
+    let pdfOk = false;
     try {
       const { generarPdfPedido } = await import("./pdf");
       const nombreArchivo = await generarPdfPedido({
@@ -617,15 +1008,28 @@ export function App() {
         lineas: lineasConSubtotal,
         resumenCategorias,
         total,
-        numeroOrden: orden,
+        numeroOrden: ordenFinal,
+        tipoEntrega: cliente.tipoEntrega,
       });
       setPdfInfo({ ok: true, nombreArchivo });
+      pdfOk = true;
     } catch (err) {
       setPdfInfo({ ok: false, motivo: err.message });
     }
 
+    setPasoEnvio("Abriendo WhatsApp...");
+    const link = armarLinkWhatsApp({ cliente, lineas: lineasConSubtotal, total, resumenCategorias, numeroOrden: ordenFinal, pdfOk });
+    setLinkWhatsApp(link);
+    if (link) {
+      if (ventana) ventana.location.href = link;
+      else window.open(link, "_blank");
+    } else if (ventana) {
+      ventana.close();
+    }
+
     setVista("confirmacion");
     setEnviando(false);
+    setPasoEnvio(null);
   }
 
   if (vista === "confirmacion") {
@@ -660,6 +1064,18 @@ export function App() {
               El catálogo todavía no tiene configurado el número de WhatsApp. Contactá a PanaPrice
               directamente para confirmar tu pedido.
             </p>
+          )}
+          {numeroOrdenRastreable && (
+            <button
+              type="button"
+              className="btn-secundario"
+              onClick={() => {
+                setOrdenParaRastrear(numeroOrden);
+                setVista("catalogo");
+              }}
+            >
+              Rastrea tu pedido
+            </button>
           )}
           {avisoErp && !avisoErp.ok && (
             <p className="nota-tecnica">(Nota interna: no se pudo registrar automáticamente en el sistema — {avisoErp.motivo}. El pedido por WhatsApp sigue siendo válido.)</p>
@@ -703,13 +1119,6 @@ export function App() {
             />
             <Buscador valor={busqueda} onChange={setBusqueda} />
           </div>
-          {Object.keys(ESCALAS_POR_CATEGORIA).map((categoria) => (
-            <MotivacionCompra
-              key={categoria}
-              categoria={categoria}
-              cantidad={acumuladoPorCategoriaEnCarrito[categoria] || 0}
-            />
-          ))}
           {cargando && <p>Cargando catálogo...</p>}
           <div className="grilla-productos" id="grilla-productos">
             {productosFiltrados.map((p) => (
@@ -727,6 +1136,10 @@ export function App() {
           {!cargando && productos.length > 0 && productosFiltrados.length === 0 && (
             <p>Ningún producto coincide con la búsqueda.</p>
           )}
+          <PersonalizaTusDisenos onAgregarDiseno={agregarDisenoAlCarrito} />
+          <div ref={seccionRastreoRef}>
+            <RastreaTuPedido key={ordenParaRastrear || "vacio"} valorInicial={ordenParaRastrear} />
+          </div>
         </main>
       )}
 
@@ -737,40 +1150,48 @@ export function App() {
           </button>
           <h2>Tu pedido</h2>
           {carrito.length === 0 && <p>Tu carrito está vacío.</p>}
-          {lineasConSubtotal.map((linea) => (
-            <div className="linea-carrito" key={linea.clave}>
-              <div className="linea-miniatura-wrap">
-                {linea.producto.imagenUrl ? (
-                  <img src={linea.producto.imagenUrl} alt={linea.producto.nombre} className="linea-miniatura" />
-                ) : (
-                  <div className="linea-miniatura linea-miniatura-vacia" aria-hidden="true" />
-                )}
-              </div>
-              <div className="linea-cuerpo">
-                <div className="linea-encabezado">
-                  <strong>{linea.producto.nombre}</strong>
-                  <span className="linea-ref">Ref. {linea.producto.codigo}</span>
-                  <span className="linea-precio">${linea.unitario.toFixed(2)} c/u</span>
+          {lineasConSubtotal.map((linea) => {
+            const esPersonalizado = linea.tipo === "personalizado";
+            return (
+              <div className="linea-carrito" key={linea.clave}>
+                <div className="linea-miniatura-wrap">
+                  {linea.producto.imagenUrl || linea.previewUrl ? (
+                    <img
+                      src={linea.producto.imagenUrl || linea.previewUrl}
+                      alt={linea.producto.nombre}
+                      className="linea-miniatura"
+                    />
+                  ) : (
+                    <div className="linea-miniatura linea-miniatura-vacia" aria-hidden="true" />
+                  )}
                 </div>
-                <div className="linea-controles">
-                  <input
-                    type="number"
-                    min={1}
-                    value={linea.cantidad}
-                    onChange={(e) => actualizarLinea(linea.clave, { cantidad: e.target.value })}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Notas de diseño (ej. colores, logo)"
-                    value={linea.disenoNotas}
-                    onChange={(e) => actualizarLinea(linea.clave, { disenoNotas: e.target.value })}
-                  />
-                  <button onClick={() => quitarLinea(linea.clave)}>Quitar</button>
+                <div className="linea-cuerpo">
+                  <div className="linea-encabezado">
+                    <strong>{linea.producto.nombre}</strong>
+                    <span className="linea-ref">{esPersonalizado ? "Diseño propio" : `Ref. ${linea.producto.codigo}`}</span>
+                    <span className="linea-precio">{esPersonalizado ? "A cotizar" : `$${linea.unitario.toFixed(2)} c/u`}</span>
+                  </div>
+                  {esPersonalizado && linea.disenoNotas && <p className="linea-notas">Obs: {linea.disenoNotas}</p>}
+                  <div className="linea-controles">
+                    <input
+                      type="number"
+                      min={1}
+                      value={linea.cantidad}
+                      onChange={(e) => actualizarLinea(linea.clave, { cantidad: e.target.value })}
+                    />
+                    <button type="button" className="btn-eliminar" onClick={() => quitarLinea(linea.clave)}>
+                      🗑 Eliminar producto
+                    </button>
+                  </div>
+                  <p className="linea-subtotal">
+                    {esPersonalizado ? "Subtotal: a cotizar por WhatsApp" : `Subtotal: $${linea.subtotal.toFixed(2)}`}
+                  </p>
                 </div>
-                <p className="linea-subtotal">Subtotal: ${linea.subtotal.toFixed(2)}</p>
               </div>
-            </div>
-          ))}
+            );
+          })}
+
+          <ResumenVisualPedido lineas={lineasConSubtotal} />
 
           {resumenCategorias.length > 0 && (
             <div className="resumen-categorias">
@@ -793,6 +1214,15 @@ export function App() {
               ))}
             </div>
           )}
+
+          {Object.keys(ESCALAS_POR_CATEGORIA).map((categoria) => (
+            <AsistenteComercial
+              key={categoria}
+              categoria={categoria}
+              cantidad={acumuladoPorCategoriaEnCarrito[categoria] || 0}
+              onVerMasDisenos={() => setVista("catalogo")}
+            />
+          ))}
 
           {carrito.length > 0 && (
             <>
@@ -826,8 +1256,34 @@ export function App() {
                   />
                 </label>
 
+                <fieldset className="fieldset-entrega">
+                  <legend>Entrega</legend>
+                  <label className="opcion-entrega">
+                    <input
+                      type="radio"
+                      name="tipoEntrega"
+                      value="RETIRO"
+                      required
+                      checked={cliente.tipoEntrega === "RETIRO"}
+                      onChange={(e) => setCliente({ ...cliente, tipoEntrega: e.target.value })}
+                    />
+                    Retiro en tienda
+                  </label>
+                  <label className="opcion-entrega">
+                    <input
+                      type="radio"
+                      name="tipoEntrega"
+                      value="ENVIO"
+                      required
+                      checked={cliente.tipoEntrega === "ENVIO"}
+                      onChange={(e) => setCliente({ ...cliente, tipoEntrega: e.target.value })}
+                    />
+                    Envío a domicilio
+                  </label>
+                </fieldset>
+
                 <button type="submit" className="btn-primary" disabled={enviando}>
-                  {enviando ? "Preparando..." : "Enviar pedido por WhatsApp"}
+                  {enviando ? pasoEnvio || "Preparando..." : "Enviar pedido por WhatsApp"}
                 </button>
               </form>
             </>

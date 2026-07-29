@@ -35,7 +35,15 @@ publicoRouter.get("/productos", async (req, res, next) => {
 publicoRouter.post("/solicitudes", async (req, res, next) => {
   try {
     const solicitud = await solicitudesService.crearSolicitudPublica(empresaCatalogo(), req.body);
-    res.status(201).json({ solId: solicitud.solId, id: solicitud.id });
+    res.status(201).json({ solId: solicitud.solId, id: solicitud.id, numeroOrden: solicitud.numeroOrden });
+  } catch (err) {
+    next(err);
+  }
+});
+
+publicoRouter.get("/rastreo/:numeroOrden", async (req, res, next) => {
+  try {
+    res.json(await solicitudesService.obtenerRastreoPublico(empresaCatalogo(), req.params.numeroOrden));
   } catch (err) {
     next(err);
   }

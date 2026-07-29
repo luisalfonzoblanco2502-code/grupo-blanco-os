@@ -77,9 +77,12 @@ export async function getProductos() {
   }
 }
 
-// Best-effort: se intenta crear la solicitud en el ERP, pero el resultado
-// NUNCA debe frenar el flujo de WhatsApp (ver handleEnviarPedido en App.jsx,
-// que llama a esto sin esperar/depender de su resultado para abrir wa.me).
+// Se espera (await) en handleEnviarPedido porque de acá sale el numeroOrden
+// REAL y secuencial (PP-2026-000154, generado server-side en
+// crearSolicitudPublica) — pero su fallo NUNCA debe impedir enviar el
+// pedido por WhatsApp: si esto falla (migración de Supabase pendiente, sin
+// red, etc.), App.jsx genera un número de referencia local y sigue el flujo
+// igual, solo que ese número no va a aparecer en "Rastrea tu pedido".
 export async function intentarCrearSolicitudEnERP(payload) {
   if (DATA_SOURCE === "local") {
     return { ok: false, motivo: "modo local: Supabase todavía no está conectado" };
@@ -89,7 +92,20 @@ export async function intentarCrearSolicitudEnERP(payload) {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    return { ok: true, solId: data.solId };
+    return { ok: true, solId: data.solId, numeroOrden: data.numeroOrden };
+  } catch (err) {
+    return { ok: false, motivo: err.message };
+  }
+}
+
+// Consulta pública de estado — usada por "Rastrea tu pedido". No depende de
+// DATA_SOURCE=local (no tendría sentido rastrear un pedido en modo local,
+// que nunca llega a ningún backend): si no hay API configurada o falla,
+// devuelve ok:false con un motivo legible para mostrar al cliente.
+export async function consultarRastreo(numeroOrden) {
+  try {
+    const data = await fetchConTimeout(`/publico/rastreo/${encodeURIComponent(numeroOrden)}`);
+    return { ok: true, ...data };
   } catch (err) {
     return { ok: false, motivo: err.message };
   }
@@ -99,23 +115,29 @@ function soloDigitos(texto) {
   return String(texto || "").replace(/\D/g, "");
 }
 
-// Arma el link wa.me con el pedido ya redactado — el cliente solo tiene que
-// tocar "Enviar" en WhatsApp. Si VITE_WHATSAPP_NUMERO no está configurado,
-// devuelve null (App.jsx lo maneja mostrando un aviso en vez de romper).
-export function armarLinkWhatsApp({ cliente, lineas, total, resumenCategorias = [], numeroOrden }) {
-  const numero = soloDigitos(import.meta.env.VITE_WHATSAPP_NUMERO);
-  if (!numero) return null;
+// Mensaje corto — la Orden Comercial en PDF ya lleva TODO el detalle (ver
+// pdf.js), así que el texto de WhatsApp solo tiene que confirmar que el
+// pedido se generó y dar el número. Copy exacto pedido por el negocio
+// (sprint "experiencia de compra", 2026-07-29).
+function mensajeCorto(numeroOrden) {
+  return ["Hola Panaprice.", "Acabo de generar mi pedido.", "", `Orden: ${numeroOrden}`, "", "Adjunto el PDF con toda la información.", "Muchas gracias."].join(
+    "\n"
+  );
+}
 
+// Fallback con el detalle completo — se usa SOLO si el PDF no se pudo
+// generar (imagen rota, jsPDF no cargó, etc.), para que el pedido nunca
+// quede sin información aunque falte el adjunto. Mismo formato que las
+// versiones anteriores del catálogo.
+function mensajeDetallado({ cliente, lineas, total, resumenCategorias, numeroOrden }) {
   const detalleItems = lineas
     .map((l) => {
       const nota = l.disenoNotas ? ` (${l.disenoNotas})` : "";
-      return `- [${l.producto.codigo}] ${l.producto.nombre}${nota} — ${l.cantidad}x $${l.unitario.toFixed(2)} = $${l.subtotal.toFixed(2)}`;
+      const precio = l.tipo === "personalizado" ? "a cotizar" : `${l.cantidad}x $${l.unitario.toFixed(2)} = $${l.subtotal.toFixed(2)}`;
+      return `- [${l.producto.codigo}] ${l.producto.nombre}${nota} — ${precio}`;
     })
     .join("\n");
 
-  // Un bloque de resumen por cada categoría con escala acumulada (hoy solo
-  // Pañoletas) — mismos datos que se muestran en el carrito, para que el
-  // equipo vea de un vistazo qué tarifa aplicó sin tener que sumar a mano.
   const bloquesResumen = resumenCategorias
     .map(
       (r) =>
@@ -127,8 +149,8 @@ export function armarLinkWhatsApp({ cliente, lineas, total, resumenCategorias = 
     )
     .join("\n");
 
-  const mensaje = [
-    "Pedido desde el catálogo PanaPrice",
+  return [
+    "Pedido desde el catálogo PanaPrice (no se pudo adjuntar el PDF)",
     numeroOrden ? `N.º de orden: ${numeroOrden}` : null,
     "",
     `Cliente: ${cliente.nombre}`,
@@ -141,6 +163,18 @@ export function armarLinkWhatsApp({ cliente, lineas, total, resumenCategorias = 
     "",
     `Total estimado: $${total.toFixed(2)}`,
   ].join("\n");
+}
+
+// Arma el link wa.me con el pedido ya redactado — el cliente solo tiene que
+// tocar "Enviar" en WhatsApp. Si VITE_WHATSAPP_NUMERO no está configurado,
+// devuelve null (App.jsx lo maneja mostrando un aviso en vez de romper).
+// pdfOk decide la plantilla: corta (confía en el PDF adjunto) o detallada
+// (fallback honesto si el PDF no se generó).
+export function armarLinkWhatsApp({ cliente, lineas, total, resumenCategorias = [], numeroOrden, pdfOk }) {
+  const numero = soloDigitos(import.meta.env.VITE_WHATSAPP_NUMERO);
+  if (!numero) return null;
+
+  const mensaje = pdfOk ? mensajeCorto(numeroOrden) : mensajeDetallado({ cliente, lineas, total, resumenCategorias, numeroOrden });
 
   return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
 }

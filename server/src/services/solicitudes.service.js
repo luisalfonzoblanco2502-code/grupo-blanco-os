@@ -38,6 +38,23 @@ const INCLUDE_DETALLE = {
   pedido: { select: { id: true, pedId: true } },
 };
 
+// Estado de producción/entrega visible para el CLIENTE en "Rastrea tu
+// pedido" — orden fijo, independiente del `estado` interno de revisión de
+// staff. LISTO_RETIRO y ENVIADO/DISPONIBLE_RETIRO son ramas alternativas
+// según tipoEntrega (ver obtenerRastreoPublico), no una secuencia única.
+export const ETAPAS_PUBLICAS = [
+  "RECIBIDO",
+  "PRODUCCION_INICIO",
+  "PRODUCCION_FIN",
+  "PREPARANDO_ENVIO",
+  "LISTO_RETIRO",
+  "ENVIADO",
+  "DISPONIBLE_RETIRO",
+  "ENTREGADO",
+];
+
+const TIPOS_ENTREGA = ["RETIRO", "ENVIO"];
+
 function validarDatosContacto({ clienteNombre, clienteTelefono }) {
   if (!clienteNombre || !String(clienteNombre).trim()) {
     throw new ValidacionError("El nombre del cliente es obligatorio");
@@ -45,6 +62,14 @@ function validarDatosContacto({ clienteNombre, clienteTelefono }) {
   if (!clienteTelefono || !String(clienteTelefono).trim()) {
     throw new ValidacionError("El teléfono de contacto es obligatorio");
   }
+}
+
+function validarTipoEntrega(tipoEntrega) {
+  if (tipoEntrega == null || tipoEntrega === "") return null;
+  if (!TIPOS_ENTREGA.includes(tipoEntrega)) {
+    throw new ValidacionError(`tipoEntrega inválido: debe ser RETIRO o ENVIO`);
+  }
+  return tipoEntrega;
 }
 
 async function siguienteSolId(tx, empresaId) {
@@ -56,12 +81,30 @@ async function siguienteSolId(tx, empresaId) {
   );
 }
 
+// Número de orden PÚBLICO (ej. "PP-2026-000154") — mismo patrón que
+// siguienteSolId, pero con prefijo anual: reinicia el conteo cada año
+// (PP-2027-000001, etc.), que es como el negocio piensa su numeración de
+// cara al cliente.
+async function siguienteNumeroOrdenPublico(tx, empresaId) {
+  const prefijo = `PP-${new Date().getFullYear()}`;
+  const existentes = await tx.solicitudPedido.findMany({
+    where: { empresaId, numeroOrden: { startsWith: `${prefijo}-` } },
+    select: { numeroOrden: true },
+  });
+  return siguienteNumero(
+    existentes.map((s) => s.numeroOrden).filter(Boolean),
+    prefijo,
+    6
+  );
+}
+
 // Público, sin req.usuario — se usa desde catalogo.panaprice.com. Valida
 // cada producto contra la MISMA fuente de verdad que el catálogo público
 // (activo + publicadoCatalogo + de la empresa correcta), así que no se puede
 // solicitar un producto que el cliente nunca debió haber visto.
-export async function crearSolicitudPublica(empresaId, { clienteNombre, clienteTelefono, clienteEmail, notasPersonalizacion, items }) {
+export async function crearSolicitudPublica(empresaId, { clienteNombre, clienteTelefono, clienteEmail, notasPersonalizacion, tipoEntrega, items }) {
   validarDatosContacto({ clienteNombre, clienteTelefono });
+  const tipoEntregaValidado = validarTipoEntrega(tipoEntrega);
 
   if (!Array.isArray(items) || items.length === 0) {
     throw new ValidacionError("La solicitud debe incluir al menos un producto");
@@ -94,16 +137,20 @@ export async function crearSolicitudPublica(empresaId, { clienteNombre, clienteT
     });
 
     const solId = await siguienteSolId(tx, empresaId);
+    const numeroOrden = await siguienteNumeroOrdenPublico(tx, empresaId);
 
     const solicitud = await tx.solicitudPedido.create({
       data: {
         empresaId,
         solId,
+        numeroOrden,
         clienteNombre: clienteNombre.trim(),
         clienteTelefono: clienteTelefono.trim(),
         clienteEmail: clienteEmail?.trim() || null,
         notasPersonalizacion: notasPersonalizacion?.trim() || null,
+        tipoEntrega: tipoEntregaValidado,
         estado: "RECIBIDA",
+        estadoPublico: "RECIBIDO",
         items: { create: itemsData },
       },
       include: INCLUDE_DETALLE,
@@ -125,6 +172,25 @@ export async function crearSolicitudPublica(empresaId, { clienteNombre, clienteT
 
     return solicitud;
   });
+}
+
+// Público, sin req.usuario — usado por "Rastrea tu pedido" del catálogo.
+// Solo expone campos seguros para mostrar a un desconocido que solo sabe el
+// número de orden (nada de teléfono/nombre/items de OTRAS solicitudes).
+export async function obtenerRastreoPublico(empresaId, numeroOrden) {
+  const solicitud = await prisma.solicitudPedido.findFirst({
+    where: { empresaId, numeroOrden: numeroOrden?.trim() || "__ninguno__" },
+    select: {
+      numeroOrden: true,
+      estadoPublico: true,
+      tipoEntrega: true,
+      agenciaEnvio: true,
+      creadoEn: true,
+      actualizadoEn: true,
+    },
+  });
+  if (!solicitud) throw new NoEncontradoError("No encontramos un pedido con ese número de orden");
+  return solicitud;
 }
 
 export async function listarSolicitudes(empresaId, estado) {

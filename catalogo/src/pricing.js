@@ -79,19 +79,35 @@ export function escalaParaMostrar(producto) {
   return null;
 }
 
-// Mensajes de celebración al alcanzar exactamente un escalón — tono
-// elegante, nunca infantil ("excelente socio", no "genial!!! 🥳🥳").
+// Mensajes de celebración al alcanzar exactamente un escalón — tono de
+// Asistente Comercial: elegante, nunca infantil ni técnico ("excelente
+// socio", no "genial!!! 🥳🥳"). Redactados 2026-07-29 (sprint "experiencia
+// de compra") con la voz exacta pedida por el negocio.
 const CELEBRACION_POR_CANTIDAD = {
   3: { emoji: "🎉", texto: "Excelente. Ya desbloqueaste la tarifa para 3 unidades." },
   6: { emoji: "🚀", texto: "Ahora eres cliente mayorista." },
-  12: { emoji: "🤝", texto: "Excelente socio. Ya eres un aliado comercial de Panaprice." },
+  12: {
+    emoji: "🤝",
+    texto: "Excelente socio. Ya eres un Aliado Comercial Panaprice. Ahora disfrutas nuestra tarifa preferencial de producción.",
+  },
   50: { emoji: "🏭", texto: "Producción comercial desbloqueada." },
   100: { emoji: "🔥", texto: "Producción empresarial." },
 };
 
-// Estado completo de "motivación de compra" para una categoría con escala,
-// dada la cantidad ya acumulada en el carrito — de acá salen el mensaje,
-// la barra de progreso y el ahorro estimado (ver MotivacionCompra en
+// Nombre de marca de cada tramo — para no repetir "el precio de $X c/u" en
+// todos los mensajes: cada umbral tiene su propia identidad comercial
+// (mayorista, Aliado Comercial, etc.), igual que las celebraciones de arriba.
+const ETIQUETA_TRAMO = {
+  3: "el precio de producción",
+  6: "el precio mayorista",
+  12: "la tarifa de Aliado Comercial",
+  50: "la tarifa de producción comercial",
+  100: "la tarifa de producción empresarial",
+};
+
+// Estado completo del Asistente Comercial para una categoría con escala,
+// dada la cantidad ya acumulada en el carrito — de acá salen el mensaje, la
+// barra de progreso y el ahorro estimado (ver AsistenteComercial en
 // App.jsx). Devuelve null si la categoría no tiene escala o no hay nada
 // todavía en el carrito (no hay nada que motivar con cantidad 0).
 export function estadoMotivacion(categoria, cantidad) {
@@ -107,13 +123,18 @@ export function estadoMotivacion(categoria, cantidad) {
     mensaje = celebracion;
   } else if (siguiente) {
     const faltan = siguiente.cantidadMinima - cantidad;
-    mensaje = {
-      emoji: null,
-      texto:
-        faltan === 1
-          ? `Solo te falta 1 unidad para desbloquear la tarifa de $${siguiente.precioUnitario.toFixed(2)} c/u.`
-          : `Por solo ${faltan} unidades más obtienes el precio de producción de $${siguiente.precioUnitario.toFixed(2)} c/u.`,
-    };
+    const etiqueta = ETIQUETA_TRAMO[siguiente.cantidadMinima] ?? "la siguiente tarifa";
+    const precio = `$${siguiente.precioUnitario.toFixed(2)} c/u`;
+    if (faltan === 1) {
+      mensaje = { emoji: "🔥", texto: `Ya casi llegas. Solo falta 1 unidad para obtener ${etiqueta} (${precio}).` };
+    } else if (actual.cantidadMinima === 1) {
+      mensaje = {
+        emoji: "💡",
+        texto: `Tu pedido comenzó muy bien. Con solo ${faltan} unidades más desbloqueas ${etiqueta} de ${precio}.`,
+      };
+    } else {
+      mensaje = { emoji: "💡", texto: `Con ${faltan} unidades más desbloqueas ${etiqueta} de ${precio}.` };
+    }
   } else {
     mensaje = { emoji: "🔥", texto: "Ya tenés la mejor tarifa disponible de Panaprice." };
   }
@@ -130,3 +151,36 @@ export function estadoMotivacion(categoria, cantidad) {
 
   return { mensaje, actual, siguiente, ahorro, progreso, cantidad };
 }
+
+// Emoji por categoría — usado en el resumen visual del pedido ("Tu pedido
+// incluye: 🧣 12 Pañoletas") y en el módulo de diseños personalizados.
+// Coincide por substring (no exacto) para cubrir tanto la categoría real de
+// un Producto ("Pañoletas", plural, viene de la API) como la opción elegida
+// en el selector de "Personaliza tus diseños" (singular).
+const ICONOS_CATEGORIA = [
+  { match: /pañoleta/i, emoji: "🧣" },
+  { match: /franela|camisa|t-?shirt/i, emoji: "👕" },
+  { match: /chemise/i, emoji: "👔" },
+  { match: /pareo/i, emoji: "🧵" },
+  { match: /bandana/i, emoji: "🎽" },
+  { match: /lanyard/i, emoji: "🪢" },
+  { match: /personalizad/i, emoji: "🎨" },
+];
+
+export function iconoCategoria(categoria) {
+  const encontrado = ICONOS_CATEGORIA.find((i) => i.match.test(categoria || ""));
+  return encontrado ? encontrado.emoji : "🛍️";
+}
+
+// Opciones del selector "Producto" en Personaliza tus diseños — texto libre
+// en el fondo (SolicitudPedidoItem no se toca este sprint), esto solo
+// ordena la lista visible en el formulario.
+export const TIPOS_PRODUCTO_PERSONALIZABLE = [
+  "Pañoleta",
+  "Franela",
+  "Chemise",
+  "Pareo",
+  "Bandana",
+  "Lanyard",
+  "Otro",
+];

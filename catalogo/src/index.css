@@ -365,35 +365,92 @@ body {
   max-width: 32rem;
 }
 
+/* Tarjetas, no una lista — inspiración Apple/Stripe/Notion: mucho aire,
+   esquinas grandes, sombra sutil solo al pasar el mouse (nunca ilustrativo
+   ni recargado). 2 columnas ya en móvil (punto 3 del sprint "experiencia
+   de compra"). */
 .porque-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 2.5rem 2rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.85rem;
   text-align: left;
 }
 
+@media (min-width: 640px) {
+  .porque-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+.porque-item {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 18px;
+  padding: 1.05rem 1rem 1.2rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+@media (min-width: 640px) {
+  .porque-item {
+    border-radius: 20px;
+    padding: 1.75rem 1.6rem;
+  }
+}
+
+@media (hover: hover) {
+  .porque-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 30px rgba(17, 17, 17, 0.08);
+    border-color: color-mix(in srgb, var(--azul) 25%, var(--borde));
+  }
+}
+
 .porque-item h3 {
-  margin: 0.9rem 0 0.35rem;
-  font-size: 1.02rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.92rem;
   font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+@media (min-width: 640px) {
+  .porque-item h3 {
+    font-size: 1.05rem;
+    margin-top: 0.2rem;
+  }
 }
 
 .porque-item p {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   color: var(--texto-suave);
   line-height: 1.5;
 }
 
+@media (min-width: 640px) {
+  .porque-item p {
+    font-size: 0.88rem;
+  }
+}
+
 .porque-icono {
-  width: 46px;
-  height: 46px;
+  width: 42px;
+  height: 42px;
   border-radius: 12px;
-  background: var(--gris-claro);
+  background: color-mix(in srgb, var(--azul) 12%, var(--gris-claro));
   color: var(--azul);
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 0.8rem;
+}
+
+@media (min-width: 640px) {
+  .porque-icono {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 1.1rem;
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -409,48 +466,74 @@ body {
 }
 
 /* ---------------------------------------------------------------------- */
-/* Motivación de compra: mensaje + barra de progreso hacia el siguiente   */
-/* escalón. Una sola vez por categoría (no por tarjeta) — la tarjeta       */
-/* se mantiene mínima a propósito.                                        */
+/* Asistente Comercial: parte del carrito (Productos → Resumen →          */
+/* Asistente Comercial → Botón), no un banner aparte del catálogo. Mensaje */
+/* + barra de progreso hacia el siguiente escalón, una vez por categoría.  */
 /* ---------------------------------------------------------------------- */
-.motivacion {
-  background: color-mix(in srgb, var(--azul) 6%, var(--blanco));
+.asistente-comercial {
+  background: color-mix(in srgb, var(--azul) 6%, var(--superficie));
   border: 1px solid color-mix(in srgb, var(--azul) 18%, var(--borde));
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
+  border-radius: 14px;
+  padding: 1rem 1.1rem 1.15rem;
+  margin: 1.25rem 0;
 }
 
-.motivacion-mensaje {
+.asistente-eyebrow {
+  margin: 0 0 0.4rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--azul);
+}
+
+.asistente-mensaje {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: var(--azul-oscuro);
+  line-height: 1.45;
 }
 
-.motivacion-barra {
+.asistente-barra {
   height: 6px;
   border-radius: 999px;
   background: var(--gris-claro);
   overflow: hidden;
-  margin-top: 0.55rem;
+  margin-top: 0.7rem;
 }
 
-.motivacion-barra-relleno {
+.asistente-barra-relleno {
   height: 100%;
   border-radius: 999px;
   background: var(--azul);
   transition: width 0.4s ease;
 }
 
-.motivacion-detalle {
-  margin: 0.4rem 0 0;
-  font-size: 0.76rem;
+.asistente-detalle {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
   color: var(--texto-suave);
 }
 
-.motivacion-detalle strong {
+.asistente-detalle strong {
   color: var(--azul-oscuro);
+}
+
+.btn-ver-mas-disenos {
+  display: inline-block;
+  margin-top: 0.75rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--azul);
+  cursor: pointer;
+}
+
+.btn-ver-mas-disenos:hover {
+  text-decoration: underline;
 }
 
 .barra-categorias {
@@ -972,9 +1055,38 @@ body {
   width: 4.5rem;
 }
 
-.linea-controles input[type="text"] {
-  flex: 1;
-  min-width: 10rem;
+.linea-notas {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  color: var(--texto-suave);
+  font-style: italic;
+}
+
+/* Punto 5 del sprint "experiencia de compra": negro sólido + texto blanco,
+   nada de botón gris genérico — es una acción irreversible del carrito. En
+   modo oscuro se aclara un poco (si no, se confunde con la tarjeta). */
+.btn-eliminar {
+  background: var(--negro);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+
+.btn-eliminar:hover {
+  opacity: 0.82;
+}
+
+@media (prefers-color-scheme: dark) {
+  .btn-eliminar {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+  }
 }
 
 input,
@@ -1024,6 +1136,37 @@ textarea:focus {
   font-weight: 700;
 }
 
+/* "Tu pedido incluye: 🧣 12 Pañoletas · 🎨 3 Diseños personalizados" — más
+   visual que el resumen técnico de tarifas, va antes de este. */
+.resumen-visual {
+  background: var(--gris-claro);
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem;
+  margin: 1rem 0;
+}
+
+.resumen-visual-titulo {
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.resumen-visual-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.resumen-visual-lista li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .total {
   font-size: 1.15rem;
   font-weight: 700;
@@ -1042,6 +1185,36 @@ textarea:focus {
   font-size: 0.88rem;
   color: var(--texto-suave);
   font-weight: 500;
+}
+
+.fieldset-entrega {
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 0.7rem 1rem 0.9rem;
+  margin: 0;
+}
+
+.fieldset-entrega legend {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0 0.4rem;
+  color: var(--texto-suave);
+}
+
+.form-checkout .opcion-entrega {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--texto);
+  padding: 0.35rem 0;
+  cursor: pointer;
+}
+
+.opcion-entrega input {
+  width: auto;
 }
 
 .error {
@@ -1152,12 +1325,292 @@ textarea:focus {
     align-items: stretch;
   }
 
-  .linea-controles input[type="number"],
-  .linea-controles input[type="text"] {
+  .linea-controles input[type="number"] {
     width: 100%;
   }
 
   .form-checkout button {
     width: 100%;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Personaliza tus diseños                                                */
+/* ---------------------------------------------------------------------- */
+.seccion-personaliza {
+  padding: 2.5rem 0;
+  margin-top: 1rem;
+  border-top: 1px solid var(--borde);
+}
+
+.disenos-lista {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.85rem;
+  margin: 1.5rem 0;
+}
+
+@media (min-width: 640px) {
+  .disenos-lista {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .disenos-lista {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.diseno-card {
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--superficie);
+  display: flex;
+  flex-direction: column;
+}
+
+.diseno-imagen-wrap {
+  aspect-ratio: 1 / 1;
+  background: var(--gris-claro);
+}
+
+.diseno-miniatura {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.diseno-subir {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  color: var(--texto-suave);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.diseno-subir span:first-child {
+  font-size: 1.6rem;
+}
+
+.diseno-cuerpo {
+  padding: 0.8rem 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.diseno-nombre-archivo {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diseno-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+
+.diseno-campo input,
+.diseno-campo select,
+.diseno-campo textarea {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--texto);
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo);
+  resize: vertical;
+}
+
+.diseno-acciones {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.diseno-acciones .btn-primary {
+  flex: 1;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+.diseno-acciones .btn-eliminar {
+  padding: 0.55rem 0.7rem;
+  font-size: 0.72rem;
+}
+
+.btn-agregar-diseno {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 1.5px dashed var(--borde);
+  border-radius: 10px;
+  padding: 0.7rem 1.2rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--azul);
+  cursor: pointer;
+}
+
+.btn-agregar-diseno:hover {
+  border-color: var(--azul);
+  background: color-mix(in srgb, var(--azul) 5%, transparent);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Rastrea tu pedido                                                       */
+/* ---------------------------------------------------------------------- */
+.seccion-rastreo {
+  padding: 2.5rem 0 3rem;
+  border-top: 1px solid var(--borde);
+}
+
+.form-rastreo {
+  display: flex;
+  gap: 0.6rem;
+  margin: 1.25rem 0;
+  flex-wrap: wrap;
+}
+
+.form-rastreo input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.rastreo-no-encontrado {
+  color: var(--texto-suave);
+  font-size: 0.86rem;
+  background: var(--gris-claro);
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+}
+
+.rastreo-numero {
+  font-weight: 700;
+  margin: 0 0 1.4rem;
+}
+
+.rastreo-timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.rastreo-paso {
+  display: flex;
+  gap: 0.9rem;
+  position: relative;
+  padding-bottom: 1.75rem;
+}
+
+.rastreo-paso:last-child {
+  padding-bottom: 0;
+}
+
+.rastreo-paso:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 38px;
+  bottom: 0;
+  width: 2px;
+  background: var(--borde);
+}
+
+.rastreo-paso-icono {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
+  background: var(--gris-claro);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  z-index: 1;
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+.rastreo-paso-cuerpo h3 {
+  margin: 0.15rem 0 0.2rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--texto-suave);
+}
+
+.rastreo-paso-cuerpo p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+  opacity: 0.75;
+}
+
+.rastreo-paso-completado .rastreo-paso-icono {
+  background: color-mix(in srgb, var(--azul) 15%, var(--gris-claro));
+  filter: none;
+  opacity: 1;
+}
+
+.rastreo-paso-completado .rastreo-paso-cuerpo h3 {
+  color: var(--texto);
+}
+
+.rastreo-paso-completado .rastreo-paso-cuerpo p {
+  opacity: 1;
+}
+
+.rastreo-paso-completado:not(:last-child)::before {
+  background: var(--azul);
+}
+
+.rastreo-paso-actual .rastreo-paso-icono {
+  background: var(--azul);
+  filter: none;
+  opacity: 1;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--azul) 20%, transparent);
+}
+
+.rastreo-paso-actual .rastreo-paso-cuerpo h3 {
+  color: var(--azul);
+}
+
+.rastreo-paso-actual .rastreo-paso-cuerpo p {
+  opacity: 1;
+  color: var(--texto);
+}
+
+.rastreo-paso-pendiente .rastreo-paso-icono {
+  opacity: 0.35;
+}
+
+@media (max-width: 860px) {
+  .disenos-lista {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .diseno-acciones {
+    flex-direction: column;
   }
 }

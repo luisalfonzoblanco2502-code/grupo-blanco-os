@@ -47,6 +47,20 @@ model Empresa {
   productos         Producto[]
   solicitudesPedido SolicitudPedido[]
 
+  // Facturador Administrativo Inteligente (2026-07-28)
+  productosInternos     ProductoInterno[]
+  clientes              Cliente[]
+  documentosVenta       DocumentoVenta[]
+  cajasCuentas          CajaCuenta[]
+  pagosIngresos         PagoIngreso[]
+  egresos               Egreso[]
+  itemsInventario       ItemInventario[]
+  productoInsumos       ProductoInsumo[]
+  movimientosInventario MovimientoInventario[]
+  costosPedido          CostoPedido[]
+  pedidoLineas          PedidoLinea[]
+  archivosAdjuntos      ArchivoAdjunto[]
+
   @@map("empresas")
 }
 
@@ -73,6 +87,10 @@ model Usuario {
   ordenesResponsable OrdenProduccion[]  @relation("OrdenResponsableUsuario")
   bitacoraEventos    BitacoraEvento[]
   auditoriaSistema   AuditoriaSistema[]
+  pagosRegistrados   PagoIngreso[]
+  egresosRegistrados Egreso[]
+  movimientosInventario MovimientoInventario[]
+  archivosAdjuntos   ArchivoAdjunto[]
 
   @@map("usuarios")
 }
@@ -108,9 +126,11 @@ model Puesto {
 // PRODUCCIÓN (existente — Pedido y OrdenProduccion son entidades separadas)
 // ----------------------------------------------------------------------------
 
-/// Lo que pidió el cliente. El cliente hoy es TEXTO LIBRE (clienteNombre) —
-/// no existe todavía una tabla `clientes` relacional (a propósito, por
-/// instrucción explícita: no se crea en esta fase).
+/// Lo que pidió el cliente. clienteNombre sigue siendo TEXTO LIBRE (no se
+/// modificó); clienteId es un enlace ADITIVO y opcional hacia la ficha real
+/// de Cliente (Facturador Administrativo, 2026-07-28) — NULL en todo pedido
+/// creado antes de esta fase, incluidos los de prueba PED-0013/0014/0015
+/// (decisión explícita: sin backfill).
 model Pedido {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   empresaId       String    @map("empresa_id") @db.Uuid
@@ -118,11 +138,21 @@ model Pedido {
   /// Identificador legible de negocio, único por empresa (no global).
   pedId           String    @map("ped_id")
   clienteNombre   String    @map("cliente_nombre")
+  clienteId       String?   @map("cliente_id") @db.Uuid
+  cliente         Cliente?  @relation(fields: [clienteId], references: [id])
   fechaIngreso    DateTime  @map("fecha_ingreso") @db.Date
   fechaCompromiso DateTime  @map("fecha_compromiso") @db.Date
   /// CHECK constraint en BD: cantidad_total > 0 (no expresable en Prisma DSL).
+  /// Producción Operativa (2026-07-28): ya NO se acepta como input manual —
+  /// se recalcula en pedidoLineas.service.js desde la suma de PedidoLinea.cantidad
+  /// cada vez que una línea se crea/edita/elimina.
   cantidadTotal   Int       @map("cantidad_total")
   observaciones   String?
+  /// Aditivos (Producción Operativa, 2026-07-28) — NULL en pedidos anteriores.
+  tipoEntrega     String?   @map("tipo_entrega")
+  direccionAgencia String?  @map("direccion_agencia")
+  prioridadId     Int?      @map("prioridad_id")
+  prioridad       Prioridad? @relation(fields: [prioridadId], references: [id])
   creadoPorId     String?   @map("creado_por") @db.Uuid
   creadoPor       Usuario?  @relation("PedidoCreadoPor", fields: [creadoPorId], references: [id])
   creadoEn        DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
@@ -132,6 +162,10 @@ model Pedido {
 
   ordenesProduccion OrdenProduccion[]
   solicitudesOrigen SolicitudPedido[]
+  documentoVenta    DocumentoVenta?
+  costos            CostoPedido?
+  movimientosInventario MovimientoInventario[]
+  lineas            PedidoLinea[]
 
   @@unique([empresaId, pedId])
   @@map("pedidos")
@@ -168,11 +202,37 @@ model OrdenProduccion {
   responsableExterno   String?   @map("responsable_externo")
   fechaEntregaReal     DateTime? @map("fecha_entrega_real") @db.Date
   observaciones        String?
+  /// Enlace ADITIVO hacia el Catálogo Interno de Productos (Facturador
+  /// Administrativo, 2026-07-28) — necesario para saber qué BOM consumir al
+  /// llegar a la etapa Corte. NULL en órdenes creadas antes de esta fase o
+  /// facturadas sin elegir un producto del catálogo.
+  productoInternoId    String?   @map("producto_interno_id") @db.Uuid
+  productoInterno      ProductoInterno? @relation(fields: [productoInternoId], references: [id])
+  /// Snapshot técnico copiado de PedidoLinea al facturar (Producción
+  /// Operativa, 2026-07-28) — deliberadamente INDEPENDIENTE de la línea
+  /// comercial: si la línea cambia después, la OP no se entera (ver
+  /// pedidoLineaId más abajo, que es solo trazabilidad/idempotencia, no una
+  /// relación viva que la OP consulte en cada lectura).
+  descripcion          String?
+  talla                String?
+  tela                 String?
+  color                String?
+  tipoImpresion        String?   @map("tipo_impresion")
+  forro                String?
+  tiras                String?
+  insumos              String?
+  /// Ancla de idempotencia: UNA orden nace de UNA línea, una sola vez.
+  /// Reprocesar PEDIDO_FACTURADO no puede duplicar la OP porque el segundo
+  /// intento de create() choca con este UNIQUE.
+  pedidoLineaId        String?   @unique @map("pedido_linea_id") @db.Uuid
+  pedidoLinea          PedidoLinea? @relation(fields: [pedidoLineaId], references: [id])
   creadoEn             DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
   actualizadoEn        DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
   eliminadoEn          DateTime? @map("eliminado_en") @db.Timestamptz(6)
 
   bitacoraEventos BitacoraEvento[]
+  movimientosInventario MovimientoInventario[]
+  archivosAdjuntos ArchivoAdjunto[]
 
   @@unique([empresaId, opId])
   // Nota: en la BD real estos dos índices son PARCIALES (WHERE eliminado_en
@@ -199,6 +259,7 @@ model Etapa {
   requiereExterno   Boolean @default(false) @map("requiere_externo")
 
   ordenesProduccion OrdenProduccion[]
+  movimientosInventario MovimientoInventario[]
 
   @@map("etapas")
 }
@@ -210,6 +271,8 @@ model Prioridad {
   peso   Int    @unique
 
   ordenesProduccion OrdenProduccion[]
+  pedidos           Pedido[]
+  pedidoLineas      PedidoLinea[]
 
   @@map("prioridades")
 }
@@ -343,12 +406,30 @@ model SolicitudPedido {
   /// Se completa únicamente cuando estado pasa a CONVERTIDA.
   pedidoId             String?   @map("pedido_id") @db.Uuid
   pedido               Pedido?   @relation(fields: [pedidoId], references: [id])
+  /// Número de orden público (ej. "PP-2026-000154"), generado por
+  /// crearSolicitudPublica con el mismo patrón que solId (ver
+  /// siguienteNumeroOrdenPublico). Lo usa el cliente en "Rastrea tu pedido"
+  /// (GET /api/publico/rastreo/:numeroOrden). Nullable: solicitudes previas
+  /// al módulo de rastreo no lo tienen.
+  numeroOrden          String?   @map("numero_orden")
+  /// Estado de producción/entrega visible para el CLIENTE — distinto de
+  /// `estado` (que es el flujo de revisión interno de staff:
+  /// RECIBIDA/EN_REVISION/APROBADA/...). Ver ETAPAS_PUBLICAS en
+  /// solicitudes.service.js para los valores válidos y su orden.
+  estadoPublico        String    @default("RECIBIDO") @map("estado_publico")
+  /// RETIRO | ENVIO — elegido por el cliente en el checkout del catálogo.
+  tipoEntrega          String?   @map("tipo_entrega")
+  /// Solo aplica si tipoEntrega = ENVIO; texto libre por ahora (MRW, Zoom,
+  /// Tealca, Domesa...) — no hay UI en el ERP todavía para completarlo
+  /// (queda para el sprint que agregue gestión de despacho en /solicitudes).
+  agenciaEnvio         String?   @map("agencia_envio")
   creadoEn             DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
   actualizadoEn        DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
 
   items SolicitudPedidoItem[]
 
   @@unique([empresaId, solId])
+  @@unique([empresaId, numeroOrden])
   @@index([empresaId, estado])
   @@map("solicitudes_pedido")
 }
@@ -370,6 +451,336 @@ model SolicitudPedidoItem {
 
   @@index([solicitudId])
   @@map("solicitud_pedido_items")
+}
+
+// ----------------------------------------------------------------------------
+// FACTURADOR ADMINISTRATIVO INTELIGENTE (2026-07-28)
+//
+// Persistencia real de lo que hasta ahora vivía en 5 simuladores en memoria
+// (server/src/services/administracion|inventario|crm|costos|
+// indicadoresFacturacion.service.js — eliminados). Reacciona a
+// PEDIDO_FACTURADO (documento + reserva + costo estimado) y a
+// ORDEN_ETAPA_CAMBIADA en la etapa "Corte" (consumo real), ambos eventos ya
+// existentes del Event Bus — no se tocó FacturacionService.
+//
+// Regla de oro del flujo: facturar RESERVA, nunca consume. El consumo
+// definitivo ocurre recién cuando la orden entra a Corte. Cancelar antes de
+// Corte libera la reserva (función lista, sin UI todavía — un pedido
+// FACTURADO no es cancelable por el flujo actual, ver reporte).
+// ----------------------------------------------------------------------------
+
+/// Catálogo Interno de Productos — base del BOM. Independiente del catálogo
+/// público (`Producto`, para catalogo.panaprice.com): este es de uso interno
+/// para costear/reservar materiales, sin campos de venta al público.
+model ProductoInterno {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId        String    @map("empresa_id") @db.Uuid
+  empresa          Empresa   @relation(fields: [empresaId], references: [id])
+  codigo           String
+  nombre           String
+  categoria        String?
+  precioReferencia Decimal?  @map("precio_referencia") @db.Decimal(12, 2)
+  activo           Boolean   @default(true)
+  creadoEn         DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn    DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+
+  insumos           ProductoInsumo[]
+  ordenesProduccion OrdenProduccion[]
+  pedidoLineas      PedidoLinea[]
+
+  @@unique([empresaId, codigo])
+  @@map("productos_internos")
+}
+
+/// Línea de un Pedido — captura estructurada de la vendedora, ANTES de
+/// facturar (Producción Operativa, 2026-07-28). Al facturar, cada línea se
+/// convierte en exactamente una OrdenProduccion (snapshot técnico copiado,
+/// ver OrdenProduccion.pedidoLineaId) — "capturar una sola vez".
+model PedidoLinea {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId               String    @map("empresa_id") @db.Uuid
+  empresa                 Empresa   @relation(fields: [empresaId], references: [id])
+  pedidoId                String    @map("pedido_id") @db.Uuid
+  pedido                  Pedido    @relation(fields: [pedidoId], references: [id])
+  ordenVisualizacion      Int       @default(0) @map("orden_visualizacion")
+  productoInternoId       String?   @map("producto_interno_id") @db.Uuid
+  productoInterno         ProductoInterno? @relation(fields: [productoInternoId], references: [id])
+  producto                String
+  descripcion             String?
+  talla                   String?
+  /// CHECK constraint en BD: cantidad > 0.
+  cantidad                Int
+  precioUnitario          Decimal?  @map("precio_unitario") @db.Decimal(12, 2)
+  /// cantidad * precioUnitario, calculado en la app al guardar la línea.
+  subtotal                Decimal?  @db.Decimal(12, 2)
+  tela                    String?
+  color                   String?
+  tipoImpresion           String?   @map("tipo_impresion")
+  forro                   String?
+  tiras                   String?
+  insumos                 String?
+  medidas                 String?
+  observacionesProduccion String?   @map("observaciones_produccion")
+  prioridadId             Int?      @map("prioridad_id")
+  prioridad               Prioridad? @relation(fields: [prioridadId], references: [id])
+  creadoEn                DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn           DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+
+  ordenProduccion  OrdenProduccion?
+  archivosAdjuntos ArchivoAdjunto[]
+
+  @@map("pedido_lineas")
+}
+
+/// Imagen principal + adjuntos, tanto de una PedidoLinea (antes de
+/// facturar) como de una OrdenProduccion (snapshot copiado al facturar —
+/// misma `ubicacion` en Storage, fila de metadata duplicada, no se
+/// re-sube el archivo). Pertenece a exactamente uno de los dos (CHECK en BD).
+model ArchivoAdjunto {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId         String           @map("empresa_id") @db.Uuid
+  empresa           Empresa          @relation(fields: [empresaId], references: [id])
+  pedidoLineaId     String?          @map("pedido_linea_id") @db.Uuid
+  pedidoLinea       PedidoLinea?     @relation(fields: [pedidoLineaId], references: [id])
+  ordenProduccionId String?          @map("orden_produccion_id") @db.Uuid
+  ordenProduccion   OrdenProduccion? @relation(fields: [ordenProduccionId], references: [id])
+  esPrincipal       Boolean          @default(false) @map("es_principal")
+  nombre            String
+  tipo              String
+  tamano            Int
+  ubicacion         String
+  usuarioId         String?          @map("usuario_id") @db.Uuid
+  usuario           Usuario?         @relation(fields: [usuarioId], references: [id])
+  creadoEn          DateTime         @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  @@map("archivos_adjuntos")
+}
+
+/// Ficha de identidad del cliente — SOLO identidad. Los totales/ticket
+/// promedio/clasificación/saldo por cobrar se calculan agregando
+/// DocumentoVenta en tiempo de lectura (crm.service.js), nunca se guardan
+/// como contador mutable: así reprocesar PEDIDO_FACTURADO no puede
+/// duplicar ni desalinear nada (ver estrategia de idempotencia del reporte).
+model Cliente {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId  String   @map("empresa_id") @db.Uuid
+  empresa    Empresa  @relation(fields: [empresaId], references: [id])
+  nombre     String
+  telefono   String?
+  email      String?
+  direccion  String?
+  creadoEn   DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  pedidos         Pedido[]
+  documentosVenta DocumentoVenta[]
+
+  @@unique([empresaId, nombre])
+  @@map("clientes")
+}
+
+/// Documento de venta — se crea una sola vez por pedido al facturar
+/// (uq_documento_pedido). "Facturar no equivale a cobrar": estado EMITIDO no
+/// implica pago, saldoPendiente arranca en total y baja con cada Pago.
+model DocumentoVenta {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId      String    @map("empresa_id") @db.Uuid
+  empresa        Empresa   @relation(fields: [empresaId], references: [id])
+  pedidoId       String    @unique @map("pedido_id") @db.Uuid
+  pedido         Pedido    @relation(fields: [pedidoId], references: [id])
+  clienteId      String?   @map("cliente_id") @db.Uuid
+  cliente        Cliente?  @relation(fields: [clienteId], references: [id])
+  numero         String
+  /// Snapshot del nombre al emitir — no cambia si el pedido ya no es editable.
+  clienteNombre  String    @map("cliente_nombre")
+  subtotal       Decimal   @db.Decimal(12, 2)
+  descuentos     Decimal   @default(0) @db.Decimal(12, 2)
+  impuestos      Decimal   @default(0) @db.Decimal(12, 2)
+  total          Decimal   @db.Decimal(12, 2)
+  moneda         String    @default("USD")
+  tasaCambio     Decimal   @default(1) @map("tasa_cambio") @db.Decimal(12, 6)
+  /// EMITIDO | ANULADO
+  estado         String    @default("EMITIDO")
+  saldoPendiente Decimal   @map("saldo_pendiente") @db.Decimal(12, 2)
+  fechaEmision   DateTime  @default(now()) @map("fecha_emision") @db.Timestamptz(6)
+  creadoEn       DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn  DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+
+  pagos PagoIngreso[]
+
+  @@unique([empresaId, numero])
+  @@map("documentos_venta")
+}
+
+/// Caja o cuenta bancaria — catálogo mínimo compartido por Pago/Egreso para
+/// que "caja/cuenta" no sea texto libre (evita que un typo divida el saldo
+/// de una misma caja en dos).
+model CajaCuenta {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  nombre    String
+  /// CAJA | BANCO
+  tipo      String   @default("CAJA")
+  activa    Boolean  @default(true)
+  creadoEn  DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  pagos   PagoIngreso[]
+  egresos Egreso[]
+
+  @@unique([empresaId, nombre])
+  @@map("cajas_cuentas")
+}
+
+/// Pago sobre un DocumentoVenta. Soporta pagos parciales desde el modelo:
+/// N filas de Pago por un mismo documento, cada una baja saldoPendiente.
+model PagoIngreso {
+  id                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId              String        @map("empresa_id") @db.Uuid
+  empresa                Empresa       @relation(fields: [empresaId], references: [id])
+  documentoVentaId       String        @map("documento_venta_id") @db.Uuid
+  documentoVenta         DocumentoVenta @relation(fields: [documentoVentaId], references: [id])
+  monto                  Decimal       @db.Decimal(12, 2)
+  moneda                 String        @default("USD")
+  tasaCambio             Decimal       @default(1) @map("tasa_cambio") @db.Decimal(12, 6)
+  metodoPago             String        @map("metodo_pago")
+  cajaCuentaId           String        @map("caja_cuenta_id") @db.Uuid
+  cajaCuenta             CajaCuenta    @relation(fields: [cajaCuentaId], references: [id])
+  fecha                  DateTime      @default(now()) @db.Timestamptz(6)
+  referencia             String?
+  /// Opcional — para integraciones futuras (pasarela/webhook) que puedan
+  /// reintentar la misma notificación sin crear el ingreso dos veces.
+  referenciaIdempotencia String?       @map("referencia_idempotencia")
+  /// CONFIRMADO | ANULADO
+  estado                 String        @default("CONFIRMADO")
+  registradoPorUsuarioId String?       @map("registrado_por_usuario_id") @db.Uuid
+  registradoPor          Usuario?      @relation(fields: [registradoPorUsuarioId], references: [id])
+  creadoEn               DateTime      @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  @@map("pagos_ingresos")
+}
+
+/// Estructura lista, SIN flujo automático — fuera del Go Live del 5 de
+/// agosto (decisión explícita). Nadie la dispara desde el Event Bus todavía.
+model Egreso {
+  id                     String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId              String     @map("empresa_id") @db.Uuid
+  empresa                Empresa    @relation(fields: [empresaId], references: [id])
+  categoria              String
+  proveedorBeneficiario  String     @map("proveedor_beneficiario")
+  monto                  Decimal    @db.Decimal(12, 2)
+  moneda                 String     @default("USD")
+  tasaCambio             Decimal    @default(1) @map("tasa_cambio") @db.Decimal(12, 6)
+  metodoPago             String     @map("metodo_pago")
+  cajaCuentaId           String     @map("caja_cuenta_id") @db.Uuid
+  cajaCuenta             CajaCuenta @relation(fields: [cajaCuentaId], references: [id])
+  fecha                  DateTime   @default(now()) @db.Timestamptz(6)
+  descripcion            String?
+  referencia             String?
+  estado                 String     @default("CONFIRMADO")
+  registradoPorUsuarioId String?    @map("registrado_por_usuario_id") @db.Uuid
+  registradoPor          Usuario?   @relation(fields: [registradoPorUsuarioId], references: [id])
+  creadoEn               DateTime   @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  @@map("egresos")
+}
+
+/// Ítem de inventario — hoy, en la práctica, materia prima/insumos (el
+/// producto vendido vive en ProductoInterno). existenciaReservada separado
+/// de existencia a propósito: reservar ≠ consumir (regla de oro del flujo).
+/// Sin CHECK de existencia >= 0: sobreventa permitida y visible (decisión
+/// aprobada), no bloqueada a nivel de base de datos.
+model ItemInventario {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId           String   @map("empresa_id") @db.Uuid
+  empresa             Empresa  @relation(fields: [empresaId], references: [id])
+  codigo              String
+  nombre              String
+  categoria           String?
+  unidadMedida        String   @default("unidad") @map("unidad_medida")
+  existencia          Decimal  @default(0) @db.Decimal(12, 3)
+  existenciaReservada Decimal  @default(0) @map("existencia_reservada") @db.Decimal(12, 3)
+  stockMinimo         Decimal  @default(0) @map("stock_minimo") @db.Decimal(12, 3)
+  costoUnitario       Decimal  @default(0) @map("costo_unitario") @db.Decimal(12, 4)
+  activo              Boolean  @default(true)
+  creadoEn            DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn       DateTime @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+
+  insumosDe   ProductoInsumo[]
+  movimientos MovimientoInventario[]
+
+  @@unique([empresaId, codigo])
+  @@map("items_inventario")
+}
+
+/// BOM: qué ítems de inventario y en qué cantidad requiere UNA unidad de un
+/// ProductoInterno. Puente real (por FK, no por texto) entre "lo que se
+/// vende" y "lo que se reserva/consume".
+model ProductoInsumo {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId          String          @map("empresa_id") @db.Uuid
+  empresa            Empresa         @relation(fields: [empresaId], references: [id])
+  productoInternoId  String          @map("producto_interno_id") @db.Uuid
+  productoInterno    ProductoInterno @relation(fields: [productoInternoId], references: [id])
+  itemInventarioId   String          @map("item_inventario_id") @db.Uuid
+  itemInventario     ItemInventario  @relation(fields: [itemInventarioId], references: [id])
+  cantidadPorUnidad  Decimal         @map("cantidad_por_unidad") @db.Decimal(12, 4)
+
+  @@unique([productoInternoId, itemInventarioId])
+  @@map("producto_insumos")
+}
+
+/// Ledger de movimientos: ENTRADA | RESERVA | CONSUMO | LIBERACION | AJUSTE.
+/// RESERVA/LIBERACION pueblan pedidoId (orden/etapa quedan NULL); CONSUMO
+/// puebla ordenProduccionId+etapaId (pedidoId queda NULL) — así conviven las
+/// dos restricciones únicas de idempotencia sin índices parciales (Postgres
+/// no aplica UNIQUE entre filas con NULL en alguna columna de la restricción).
+model MovimientoInventario {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId           String           @map("empresa_id") @db.Uuid
+  empresa             Empresa          @relation(fields: [empresaId], references: [id])
+  itemInventarioId    String           @map("item_inventario_id") @db.Uuid
+  itemInventario      ItemInventario   @relation(fields: [itemInventarioId], references: [id])
+  tipo                String
+  cantidad            Decimal          @db.Decimal(12, 3)
+  pedidoId            String?          @map("pedido_id") @db.Uuid
+  pedido              Pedido?          @relation(fields: [pedidoId], references: [id])
+  ordenProduccionId   String?          @map("orden_produccion_id") @db.Uuid
+  ordenProduccion     OrdenProduccion? @relation(fields: [ordenProduccionId], references: [id])
+  etapaId             Int?             @map("etapa_id")
+  etapa               Etapa?           @relation(fields: [etapaId], references: [id])
+  referencia          String?
+  usuarioId           String?          @map("usuario_id") @db.Uuid
+  usuario             Usuario?         @relation(fields: [usuarioId], references: [id])
+  fecha               DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@unique([empresaId, pedidoId, itemInventarioId, tipo], map: "uq_movimiento_reserva_liberacion")
+  @@unique([empresaId, ordenProduccionId, etapaId, itemInventarioId, tipo], map: "uq_movimiento_consumo")
+  @@map("movimientos_inventario")
+}
+
+/// Costo por pedido — costoReal/utilidadReal/margenReal quedan NULL hasta
+/// que exista una fase futura que los calcule desde el consumo real
+/// completo. fuente="estimado_temporal" documenta honestamente que el
+/// estimado usa un factor fijo, no un costeo real todavía.
+model CostoPedido {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId         String   @map("empresa_id") @db.Uuid
+  empresa           Empresa  @relation(fields: [empresaId], references: [id])
+  pedidoId          String   @unique @map("pedido_id") @db.Uuid
+  pedido            Pedido   @relation(fields: [pedidoId], references: [id])
+  costoEstimado     Decimal  @map("costo_estimado") @db.Decimal(12, 2)
+  costoReal         Decimal? @map("costo_real") @db.Decimal(12, 2)
+  utilidadEstimada  Decimal  @map("utilidad_estimada") @db.Decimal(12, 2)
+  utilidadReal      Decimal? @map("utilidad_real") @db.Decimal(12, 2)
+  margenEstimado    Decimal? @map("margen_estimado") @db.Decimal(6, 4)
+  margenReal        Decimal? @map("margen_real") @db.Decimal(6, 4)
+  /// {"material": x, "produccion": y, "otros": z}
+  desglose          Json     @default("{}")
+  fuente            String   @default("estimado_temporal")
+  creadoEn          DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn     DateTime @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+
+  @@map("costos_pedido")
 }
 
 // Vista de solo lectura para reportes/dashboard. Prisma puede leerla
