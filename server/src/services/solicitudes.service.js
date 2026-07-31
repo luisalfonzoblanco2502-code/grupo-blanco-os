@@ -282,7 +282,11 @@ export async function convertirSolicitud(solicitudId, empresaId, usuarioId, { fe
     .filter(Boolean)
     .join(" ");
 
-  const pedido = await crearPedido({
+  // No manda claveIdempotencia: la protección contra doble conversión ya la
+  // da la transición de estado de la solicitud misma (arriba: exige
+  // APROBADA, la deja en CONVERTIDA de inmediato), no la idempotencia de
+  // pedidos.service.js (esa es para el POST directo de /pedidos).
+  const { pedido } = await crearPedido({
     empresaId,
     usuarioId,
     clienteNombre: solicitud.clienteNombre,

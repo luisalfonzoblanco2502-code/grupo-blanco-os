@@ -1,13 +1,35 @@
 import { Router } from "express";
 import * as pedidosService from "../services/pedidos.service.js";
 import { facturarPedido } from "../services/facturacion.service.js";
-import { requirePermiso } from "../middleware/permisos.js";
+import * as pedidoLineasService from "../services/pedidoLineas.service.js";
+import { requirePermiso, tienePermiso } from "../middleware/permisos.js";
 
 export const pedidosRouter = Router();
 
 pedidosRouter.get("/", requirePermiso("ver_pedidos"), async (req, res, next) => {
   try {
     res.json(await pedidosService.listarPedidos(req.usuario.empresaId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Sugerencias por historial + reporte de calidad de dato — ver
+// pedidoLineas.service.js (principio "primero sugerir, nunca obligar").
+// DEBEN ir antes de "/:id": Express matchea por orden de registro, y
+// "sugerencias-tecnicas" calzaría con el parámetro ":id" si esta ruta
+// quedara después (un bug real que se atrapó revisando esto, no en runtime).
+pedidosRouter.get("/sugerencias-tecnicas", requirePermiso("crear_pedido"), async (req, res, next) => {
+  try {
+    res.json(await pedidoLineasService.listarSugerenciasTecnicas(req.usuario.empresaId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+pedidosRouter.get("/calidad-datos", requirePermiso("ver_dashboard_ejecutivo"), async (req, res, next) => {
+  try {
+    res.json(await pedidoLineasService.obtenerCalidadDatosTecnicos(req.usuario.empresaId));
   } catch (err) {
     next(err);
   }
@@ -23,12 +45,22 @@ pedidosRouter.get("/:id", requirePermiso("ver_pedidos"), async (req, res, next) 
 
 pedidosRouter.post("/", requirePermiso("crear_pedido"), async (req, res, next) => {
   try {
-    const pedido = await pedidosService.crearPedido({
+    // Producto Maestro (Paso 4): el override de precio solo se honra si el
+    // ROL actual ya tiene editar_pedido — se calcula acá (único lugar con
+    // req.usuario) y viaja como bandera interna, nunca decidida por el payload.
+    const permiteOverridePrecio = tienePermiso(req, "editar_pedido");
+    const lineas = Array.isArray(req.body.lineas)
+      ? req.body.lineas.map((linea) => ({ ...linea, permiteOverridePrecio }))
+      : req.body.lineas;
+    const resultado = await pedidosService.crearPedido({
       empresaId: req.usuario.empresaId,
       usuarioId: req.usuario.id,
       ...req.body,
+      lineas,
     });
-    res.status(201).json(pedido);
+    // 200 en reenvío idempotente (nada nuevo se creó) vs. 201 en creación real
+    // — el cuerpo siempre trae { pedido, idempotentReplay } en ambos casos.
+    res.status(resultado.idempotentReplay ? 200 : 201).json(resultado);
   } catch (err) {
     next(err);
   }
@@ -61,15 +93,93 @@ pedidosRouter.patch("/:id/cancelar", requirePermiso("eliminar_pedido"), async (r
   }
 });
 
+// "Capturar una sola vez": el cuerpo ya NO trae los datos técnicos de cada
+// línea (eso lo capturó la vendedora en pedido_lineas) — solo la asignación
+// de responsable/prioridad que le corresponde decidir al Administrador en
+// el momento de facturar. construirLineasParaFacturar arma el `lineas` que
+// espera facturacion.service.js (sin modificar ese archivo).
 pedidosRouter.post("/:id/facturar", requirePermiso("facturar_pedido"), async (req, res, next) => {
   try {
-    const resultado = await facturarPedido(
+    const lineas = await pedidoLineasService.construirLineasParaFacturar(
+      req.params.id,
+      req.usuario.empresaId,
+      req.body.asignaciones
+    );
+    const resultado = await facturarPedido(req.params.id, req.usuario.empresaId, req.usuario.id, { lineas });
+    res.status(201).json(resultado);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Líneas de pedido (Producción Operativa) ---
+pedidosRouter.get("/:id/lineas", requirePermiso("ver_pedidos"), async (req, res, next) => {
+  try {
+    res.json(await pedidoLineasService.listarLineas(req.params.id, req.usuario.empresaId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+pedidosRouter.post("/:id/lineas", requirePermiso("crear_pedido"), async (req, res, next) => {
+  try {
+    const datos = { ...req.body, permiteOverridePrecio: tienePermiso(req, "editar_pedido") };
+    const linea = await pedidoLineasService.crearLinea(
       req.params.id,
       req.usuario.empresaId,
       req.usuario.id,
-      req.body
+      datos
     );
-    res.status(201).json(resultado);
+    res.status(201).json(linea);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// "Caso excepcional / modificación avanzada" (Paso 4, Producto Maestro): la
+// ÚNICA vía para tocar los 12 campos técnicos del snapshot después de creada
+// la línea — deliberadamente separada de PATCH /lineas/:lineaId (arriba),
+// que sigue gobernando cantidad/precio/observaciones/prioridad sin tocar
+// nunca especificacionModificadaManualmente. Permiso propio, hoy solo
+// otorgado a ADMINISTRADOR.
+pedidosRouter.patch(
+  "/lineas/:lineaId/especificacion-avanzada",
+  requirePermiso("editar_especificacion_avanzada"),
+  async (req, res, next) => {
+    try {
+      const linea = await pedidoLineasService.actualizarEspecificacionAvanzada(
+        req.params.lineaId,
+        req.usuario.empresaId,
+        req.usuario.id,
+        req.body
+      );
+      res.json(linea);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+pedidosRouter.patch("/lineas/:lineaId", requirePermiso("editar_pedido"), async (req, res, next) => {
+  try {
+    res.json(await pedidoLineasService.actualizarLinea(req.params.lineaId, req.usuario.empresaId, req.body));
+  } catch (err) {
+    next(err);
+  }
+});
+
+pedidosRouter.post("/lineas/:lineaId/duplicar", requirePermiso("crear_pedido"), async (req, res, next) => {
+  try {
+    res.status(201).json(await pedidoLineasService.duplicarLinea(req.params.lineaId, req.usuario.empresaId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+pedidosRouter.delete("/lineas/:lineaId", requirePermiso("editar_pedido"), async (req, res, next) => {
+  try {
+    await pedidoLineasService.eliminarLinea(req.params.lineaId, req.usuario.empresaId);
+    res.status(204).end();
   } catch (err) {
     next(err);
   }

@@ -25,6 +25,15 @@ function validarDatosProducto({ codigo, nombre, categoria, precioBase }) {
   }
 }
 
+// Producto Maestro (Paso 4): mismo criterio que el CHECK real de la base
+// (chk_productos_tiempo_produccion_positivo) — nulo permitido, cero/negativo no.
+function validarTiempoProduccion(tiempoProduccionMinutos) {
+  if (tiempoProduccionMinutos == null) return;
+  if (!Number.isInteger(Number(tiempoProduccionMinutos)) || Number(tiempoProduccionMinutos) <= 0) {
+    throw new ValidacionError("El tiempo de producción debe ser un número entero mayor a 0");
+  }
+}
+
 function validarPreciosVolumen(preciosVolumen = []) {
   for (const escalon of preciosVolumen) {
     if (!Number.isInteger(escalon.cantidadMinima) || escalon.cantidadMinima <= 0) {
@@ -38,10 +47,25 @@ function validarPreciosVolumen(preciosVolumen = []) {
 
 // Único punto que consulta el catálogo público — sin req.usuario, la
 // empresa llega resuelta por quien llama (ver publico.routes.js).
+// `select` explícito (no `include`): productoInternoId es un dato interno
+// del Facturador Administrativo (BOM/inventario) — el cliente del catálogo
+// nunca debe recibirlo, ni siquiera sin querer por un `findMany` sin recortar.
 export async function listarProductosPublicos(empresaId) {
   return prisma.producto.findMany({
     where: { empresaId, activo: true, publicadoCatalogo: true, eliminadoEn: null },
-    include: INCLUDE_PRECIOS,
+    select: {
+      id: true,
+      codigo: true,
+      nombre: true,
+      categoria: true,
+      descripcion: true,
+      imagenUrl: true,
+      precioBase: true,
+      activo: true,
+      publicadoCatalogo: true,
+      disponible: true,
+      preciosVolumen: { orderBy: { cantidadMinima: "asc" } },
+    },
     orderBy: { nombre: "asc" },
   });
 }
@@ -75,9 +99,23 @@ export async function crearProducto({
   publicadoCatalogo,
   disponible,
   preciosVolumen,
+  productoInternoId,
+  requierePersonalizacion,
+  imagenReferenciaProduccionUrl,
+  talla,
+  medidas,
+  tela,
+  tipoImpresion,
+  forro,
+  tiras,
+  insumosDescripcion,
+  moldeUrl,
+  tiempoProduccionMinutos,
+  instruccionesProduccion,
 }) {
   validarDatosProducto({ codigo, nombre, categoria, precioBase });
   validarPreciosVolumen(preciosVolumen);
+  validarTiempoProduccion(tiempoProduccionMinutos);
 
   try {
     return await prisma.producto.create({
@@ -92,6 +130,22 @@ export async function crearProducto({
         activo: activo ?? true,
         publicadoCatalogo: publicadoCatalogo ?? false,
         disponible: disponible ?? true,
+        // Puente al Catálogo Interno (Fase 1) — opcional, nunca obligatorio.
+        productoInternoId: productoInternoId || null,
+        // Producto Maestro (Paso 2/4) — especificación técnica permanente,
+        // opcional a propósito ("primero sugerir, nunca obligar").
+        requierePersonalizacion: !!requierePersonalizacion,
+        imagenReferenciaProduccionUrl: imagenReferenciaProduccionUrl?.trim() || null,
+        talla: talla?.trim() || null,
+        medidas: medidas?.trim() || null,
+        tela: tela?.trim() || null,
+        tipoImpresion: tipoImpresion?.trim() || null,
+        forro: forro?.trim() || null,
+        tiras: tiras?.trim() || null,
+        insumosDescripcion: insumosDescripcion?.trim() || null,
+        moldeUrl: moldeUrl?.trim() || null,
+        tiempoProduccionMinutos: tiempoProduccionMinutos ?? null,
+        instruccionesProduccion: instruccionesProduccion?.trim() || null,
         preciosVolumen: {
           create: (preciosVolumen ?? []).map((e) => ({
             cantidadMinima: e.cantidadMinima,
@@ -124,6 +178,24 @@ export async function editarProducto(productoId, empresaId, cambios) {
     activo: cambios.activo,
     publicadoCatalogo: cambios.publicadoCatalogo,
     disponible: cambios.disponible,
+    // Puente al Catálogo Interno (Fase 1): `undefined` = no tocar el vínculo;
+    // `null`/"" = desvincular explícitamente; string real = vincular/cambiar.
+    productoInternoId: cambios.productoInternoId !== undefined ? cambios.productoInternoId || null : undefined,
+    // Producto Maestro (Paso 2/4): mismo criterio `undefined` = no tocar.
+    requierePersonalizacion: cambios.requierePersonalizacion,
+    imagenReferenciaProduccionUrl:
+      cambios.imagenReferenciaProduccionUrl !== undefined ? cambios.imagenReferenciaProduccionUrl?.trim() || null : undefined,
+    talla: cambios.talla !== undefined ? cambios.talla?.trim() || null : undefined,
+    medidas: cambios.medidas !== undefined ? cambios.medidas?.trim() || null : undefined,
+    tela: cambios.tela !== undefined ? cambios.tela?.trim() || null : undefined,
+    tipoImpresion: cambios.tipoImpresion !== undefined ? cambios.tipoImpresion?.trim() || null : undefined,
+    forro: cambios.forro !== undefined ? cambios.forro?.trim() || null : undefined,
+    tiras: cambios.tiras !== undefined ? cambios.tiras?.trim() || null : undefined,
+    insumosDescripcion: cambios.insumosDescripcion !== undefined ? cambios.insumosDescripcion?.trim() || null : undefined,
+    moldeUrl: cambios.moldeUrl !== undefined ? cambios.moldeUrl?.trim() || null : undefined,
+    tiempoProduccionMinutos: cambios.tiempoProduccionMinutos !== undefined ? cambios.tiempoProduccionMinutos ?? null : undefined,
+    instruccionesProduccion:
+      cambios.instruccionesProduccion !== undefined ? cambios.instruccionesProduccion?.trim() || null : undefined,
   };
   Object.keys(datos).forEach((k) => datos[k] === undefined && delete datos[k]);
 
@@ -138,6 +210,9 @@ export async function editarProducto(productoId, empresaId, cambios) {
   }
   if (cambios.preciosVolumen !== undefined) {
     validarPreciosVolumen(cambios.preciosVolumen);
+  }
+  if (cambios.tiempoProduccionMinutos !== undefined) {
+    validarTiempoProduccion(cambios.tiempoProduccionMinutos);
   }
 
   try {
@@ -191,12 +266,23 @@ export async function eliminarProducto(productoId, empresaId) {
   });
 }
 
+// El escalón de mayor cantidadMinima que no supere `cantidad`, o null si
+// ninguno aplica (ej. cantidad menor al primer escalón — se cae a precioBase).
+// Expuesto aparte de precioUnitarioParaCantidad para que quien necesite
+// AUDITAR "qué escala se usó" (ej. al registrar un override de precio en
+// pedidoLineas.service.js) no tenga que reimplementar el mismo filtro/sort.
+export function escalonAplicableProducto(producto, cantidad) {
+  return (
+    producto.preciosVolumen
+      .filter((e) => cantidad >= e.cantidadMinima)
+      .sort((a, b) => b.cantidadMinima - a.cantidadMinima)[0] || null
+  );
+}
+
 // Resuelve el precio unitario aplicable para una cantidad dada: el escalón
 // de mayor cantidadMinima que no supere `cantidad`, o precioBase si ninguno
 // aplica (ej. cantidad menor al primer escalón).
 export function precioUnitarioParaCantidad(producto, cantidad) {
-  const aplicable = producto.preciosVolumen
-    .filter((e) => cantidad >= e.cantidadMinima)
-    .sort((a, b) => b.cantidadMinima - a.cantidadMinima)[0];
+  const aplicable = escalonAplicableProducto(producto, cantidad);
   return aplicable ? Number(aplicable.precioUnitario) : Number(producto.precioBase);
 }

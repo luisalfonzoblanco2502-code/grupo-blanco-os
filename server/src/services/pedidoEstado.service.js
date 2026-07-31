@@ -97,3 +97,50 @@ export async function requerirEstadoPedido(tx, pedidoId, estadosPermitidos, mens
   }
   return estado;
 }
+
+// Solo la parte de auditoría (sin el fallback de "¿tiene órdenes?") — separada
+// para que el llamador pueda pedirla EN PARALELO con el findMany de pedidos
+// (no depende de conocer los ids todavía, solo de la empresa).
+export async function obtenerEventosEstadoDeEmpresa(tx, empresaId) {
+  const eventos = await tx.auditoriaSistema.findMany({
+    where: { empresaId, accion: ACCION_ESTADO_CAMBIADO },
+    orderBy: { ocurridoEn: "asc" },
+    select: { detalle: true },
+  });
+
+  const estadoPorPedido = new Map();
+  for (const evento of eventos) {
+    // orden ascendente: la última escritura para cada pedidoId gana,
+    // igual que "ORDER BY ocurridoEn DESC LIMIT 1" pero para todos a la vez.
+    estadoPorPedido.set(evento.detalle.pedidoId, evento.detalle.estadoNuevo);
+  }
+  return estadoPorPedido;
+}
+
+// Versión "en lote" de obtenerEstadoPedido — Release Candidate: arregla el
+// N+1 medido en GET /api/pedidos (17 consultas para listar unos pocos
+// pedidos, una por cada obtenerEstadoPedido individual). MISMA lógica de
+// precedencia exacta (evento de auditoría más reciente; si no hay,
+// inferir de si tiene Órdenes de Producción activas) — acá solo cambia
+// CÓMO se calcula (en lote para toda la empresa en vez de uno por uno),
+// no QUÉ se calcula. `auditoriaSistema.empresaId` es una columna real
+// (no está dentro del jsonb `detalle`), así que este filtro es una
+// comparación de columna normal, no un scan de JSON.
+export async function obtenerEstadosPedidosDeEmpresa(tx, empresaId, pedidoIds, eventosYaObtenidos) {
+  const estadoPorPedido = eventosYaObtenidos ?? (await obtenerEventosEstadoDeEmpresa(tx, empresaId));
+
+  const idsSinHistorial = pedidoIds.filter((id) => !estadoPorPedido.has(id));
+  if (idsSinHistorial.length > 0) {
+    const ordenes = await tx.ordenProduccion.findMany({
+      where: { pedidoId: { in: idsSinHistorial }, eliminadoEn: null },
+      select: { pedidoId: true },
+      distinct: ["pedidoId"],
+    });
+    const pedidosConOrdenes = new Set(ordenes.map((o) => o.pedidoId));
+    for (const id of idsSinHistorial) {
+      estadoPorPedido.set(id, pedidosConOrdenes.has(id) ? "FACTURADO" : "PENDIENTE");
+    }
+  }
+
+  return estadoPorPedido;
+}

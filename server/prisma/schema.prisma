@@ -61,6 +61,11 @@ model Empresa {
   pedidoLineas          PedidoLinea[]
   archivosAdjuntos      ArchivoAdjunto[]
 
+  // ATLAS — Centro de Atención Inteligente (2026-07-31)
+  atlasContactos        AtlasContacto[]
+  atlasIdentidadesCanal AtlasIdentidadCanal[]
+  atlasAtribucionTokens AtlasAtribucionToken[]
+
   @@map("empresas")
 }
 
@@ -91,6 +96,7 @@ model Usuario {
   egresosRegistrados Egreso[]
   movimientosInventario MovimientoInventario[]
   archivosAdjuntos   ArchivoAdjunto[]
+  atlasContactosResponsable AtlasContacto[]
 
   @@map("usuarios")
 }
@@ -159,6 +165,13 @@ model Pedido {
   actualizadoEn   DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
   /// Soft delete. Toda query de negocio debe filtrar eliminadoEn: null.
   eliminadoEn     DateTime? @map("eliminado_en") @db.Timestamptz(6)
+  /// Idempotencia mínima de POST /api/pedidos (Paso 6.1, 2026-07-31) — UUID
+  /// generado por el frontend UNA vez por borrador, enviado en cada intento
+  /// de creación. Nullable a propósito: pedidos históricos y cualquier vía
+  /// que no la mande siguen funcionando igual (Postgres permite múltiples
+  /// NULL en un UNIQUE estándar). Exclusiva de la creación — nunca se edita
+  /// después (ver editarPedido, que no la toca).
+  claveIdempotencia String?   @map("clave_idempotencia") @db.Uuid
 
   ordenesProduccion OrdenProduccion[]
   solicitudesOrigen SolicitudPedido[]
@@ -166,8 +179,10 @@ model Pedido {
   costos            CostoPedido?
   movimientosInventario MovimientoInventario[]
   lineas            PedidoLinea[]
+  atlasContactos    AtlasContacto[]
 
   @@unique([empresaId, pedId])
+  @@unique([empresaId, claveIdempotencia], map: "uq_pedidos_empresa_clave_idempotencia")
   @@map("pedidos")
 }
 
@@ -224,8 +239,15 @@ model OrdenProduccion {
   /// Ancla de idempotencia: UNA orden nace de UNA línea, una sola vez.
   /// Reprocesar PEDIDO_FACTURADO no puede duplicar la OP porque el segundo
   /// intento de create() choca con este UNIQUE.
+  /// LEGACY (mantenido por compatibilidad, ver PedidoLinea.ordenProduccionId
+  /// más abajo para el camino de lectura real de "OP agrupada"): ancla de
+  /// idempotencia de cuando una OP nacía de UNA sola línea. Toda OP creada
+  /// antes de la migración de "OP agrupada por lote" (2026-07-29) la tiene;
+  /// las OP nuevas ya no la usan como mecanismo de idempotencia (ver
+  /// `variantes` abajo), pero se sigue completando cuando el grupo es de 1
+  /// sola línea, por compatibilidad temporal de lectura.
   pedidoLineaId        String?   @unique @map("pedido_linea_id") @db.Uuid
-  pedidoLinea          PedidoLinea? @relation(fields: [pedidoLineaId], references: [id])
+  pedidoLinea          PedidoLinea? @relation("OrdenLineaOrigenLegacy", fields: [pedidoLineaId], references: [id])
   creadoEn             DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
   actualizadoEn        DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
   eliminadoEn          DateTime? @map("eliminado_en") @db.Timestamptz(6)
@@ -233,6 +255,12 @@ model OrdenProduccion {
   bitacoraEventos BitacoraEvento[]
   movimientosInventario MovimientoInventario[]
   archivosAdjuntos ArchivoAdjunto[]
+  /// Camino de lectura real de "OP agrupada" (2026-07-29): todas las
+  /// PedidoLinea que este lote agrupa, sea 1 (caso legacy tras el backfill)
+  /// o varias (caso nuevo). Impresión/detalle/API deben leer variantes acá,
+  /// nunca mezclando con las columnas snapshot de arriba (ver nota en
+  /// PedidoLinea.ordenProduccionId).
+  variantes       PedidoLinea[] @relation("OrdenVariantes")
 
   @@unique([empresaId, opId])
   // Nota: en la BD real estos dos índices son PARCIALES (WHERE eliminado_en
@@ -359,12 +387,49 @@ model Producto {
   creadoEn          DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
   actualizadoEn     DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
   eliminadoEn       DateTime? @map("eliminado_en") @db.Timestamptz(6)
+  /// Puente ADITIVO hacia el Catálogo Interno (Fase 1, sprint "Catálogo ->
+  /// Solicitud -> Pedido", 2026-07-30) — opcional a propósito ("primero
+  /// sugerir, nunca obligar"): un producto comercial sin vínculo se vende
+  /// exactamente igual que hoy, sin reserva de inventario. Cuando SÍ está
+  /// vinculado, la conversión Solicitud->Pedido y la venta directa heredan
+  /// este valor hacia PedidoLinea.productoInternoId, y desde ahí el flujo de
+  /// facturación/inventario YA existente (sin cambios) reserva el BOM real.
+  /// NUNCA se expone en /api/publico/productos (ver productos.service.js).
+  productoInternoId String?   @map("producto_interno_id") @db.Uuid
+  productoInterno   ProductoInterno? @relation(fields: [productoInternoId], references: [id])
+
+  /// Producto Maestro (2026-07-31, arquitectura aprobada "el pedido no
+  /// construye el producto"): especificación técnica PERMANENTE del
+  /// producto, ya sea de catálogo (requierePersonalizacion=false) o
+  /// personalizable (true, una fila por talla — ej. "Bolero S/M"). Se
+  /// COPIA una sola vez a PedidoLinea al crear la línea (ver
+  /// PedidoLinea.productoMaestro) — cambiar esto después NUNCA reescribe
+  /// pedidos ya capturados.
+  requierePersonalizacion       Boolean  @default(false) @map("requiere_personalizacion")
+  /// Foto permanente del MODELO FÍSICO a fabricar (miniatura izquierda en
+  /// Diseño/Producción) — distinta de `imagenUrl`, que es la foto comercial
+  /// del catálogo.
+  imagenReferenciaProduccionUrl String? @map("imagen_referencia_produccion_url")
+  talla                         String?
+  medidas                       String?
+  tela                          String?
+  tipoImpresion                 String? @map("tipo_impresion")
+  forro                         String?
+  tiras                         String?
+  /// Texto libre descriptivo ("qué insumos usa") — no confundir con
+  /// ProductoInsumo, que es el BOM real por FK (Fase 1).
+  insumosDescripcion            String? @map("insumos_descripcion")
+  moldeUrl                      String? @map("molde_url")
+  tiempoProduccionMinutos       Int?    @map("tiempo_produccion_minutos")
+  instruccionesProduccion       String? @map("instrucciones_produccion")
 
   preciosVolumen ProductoPrecioVolumen[]
   solicitudItems SolicitudPedidoItem[]
+  pedidoLineas   PedidoLinea[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId, publicadoCatalogo, activo])
+  @@index([productoInternoId], map: "idx_productos_producto_interno")
   @@map("productos")
 }
 
@@ -484,9 +549,14 @@ model ProductoInterno {
   creadoEn         DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
   actualizadoEn    DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
 
-  insumos           ProductoInsumo[]
-  ordenesProduccion OrdenProduccion[]
-  pedidoLineas      PedidoLinea[]
+  insumos              ProductoInsumo[]
+  ordenesProduccion    OrdenProduccion[]
+  pedidoLineas         PedidoLinea[]
+  /// Productos comerciales del catálogo público vinculados a este
+  /// ProductoInterno (Fase 1, "Catálogo -> Solicitud -> Pedido") — puede ser
+  /// más de uno (ej. varios colores/diseños comerciales comparten el mismo
+  /// BOM de fabricación).
+  productosComerciales Producto[]
 
   @@unique([empresaId, codigo])
   @@map("productos_internos")
@@ -525,10 +595,59 @@ model PedidoLinea {
   prioridad               Prioridad? @relation(fields: [prioridadId], references: [id])
   creadoEn                DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
   actualizadoEn           DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+  /// "OP agrupada por lote" (2026-07-29): a qué Orden de Producción pertenece
+  /// esta línea/variante. NULL hasta que se factura. Reemplaza el camino de
+  /// lectura de `ordenProduccionLegacy` (1:1) — varias líneas pueden apuntar
+  /// a la MISMA OrdenProduccion cuando comparten producto/tela/tipo de
+  /// impresión/prioridad/responsable (ver ordenesProduccion.service.js,
+  /// claveDeGrupo). Backfill aplicado a toda OP histórica antes de esta
+  /// migración, sin fusionar ni eliminar ninguna.
+  ordenProduccionId       String?   @map("orden_produccion_id") @db.Uuid
+  ordenProduccion         OrdenProduccion? @relation("OrdenVariantes", fields: [ordenProduccionId], references: [id])
+  /// Checkbox "Separar en otra Orden de Producción" — desactivado por
+  /// defecto. Si está activo, esta línea nunca se agrupa con otras al
+  /// facturar, aunque coincidan técnicamente (override manual mínimo, sin
+  /// editor de lotes).
+  separarEnOtraOp         Boolean   @default(false) @map("separar_en_otra_op")
 
-  ordenProduccion  OrdenProduccion?
+  /// Producto Maestro (2026-07-31): referencia opcional al Producto real
+  /// elegido para esta línea. `producto` (String, arriba) sigue siendo el
+  /// snapshot del NOMBRE — este campo es la relación viva al registro,
+  /// usada solo para construir el snapshot al crear la línea; nunca se
+  /// relee después (ver productoCodigo/imagenReferenciaProduccionUrl/
+  /// moldeUrlSnapshot/tiempoProduccionMinutosSnapshot/
+  /// instruccionesProduccionSnapshot más abajo, todos copiados una sola
+  /// vez). `onDelete: SetNull`: si el Producto alguna vez se borra
+  /// físicamente (hoy `eliminarProducto` solo hace soft-delete), el
+  /// histórico de la línea sobrevive con `productoId = NULL`.
+  productoId              String?   @map("producto_id") @db.Uuid
+  productoMaestro         Producto? @relation(fields: [productoId], references: [id], onDelete: SetNull)
+  /// Snapshot del código del Producto Maestro al momento de crear la línea.
+  productoCodigo                      String?  @map("producto_codigo")
+  /// Snapshot de Producto.imagenReferenciaProduccionUrl — miniatura
+  /// izquierda en Diseño/Producción (qué modelo fabricar).
+  imagenReferenciaProduccionUrl       String?  @map("imagen_referencia_produccion_url")
+  moldeUrlSnapshot                    String?  @map("molde_url_snapshot")
+  tiempoProduccionMinutosSnapshot     Int?     @map("tiempo_produccion_minutos_snapshot")
+  /// Snapshot de Producto.instruccionesProduccion — DISTINTO de
+  /// observacionesProduccion (arriba), que sigue siendo texto libre del
+  /// cliente/vendedora por pedido. Nunca se mezclan.
+  instruccionesProduccionSnapshot     String?  @map("instrucciones_produccion_snapshot")
+  /// true únicamente si alguien editó a mano, vía "Caso excepcional /
+  /// modificación avanzada", alguno de los 12 campos técnicos del snapshot
+  /// (ver ESPECIFICACION_TECNICA_CAMPOS en pedidoLineas.service.js cuando
+  /// exista) — nunca se activa por cambios de cantidad/precio/
+  /// observaciones/prioridad/responsable/fecha/imagen del diseño.
+  especificacionModificadaManualmente Boolean  @default(false) @map("especificacion_modificada_manualmente")
+
+  /// LEGACY: back-relation de OrdenProduccion.pedidoLineaId (1:1, ver nota
+  /// ahí). Se mantiene por compatibilidad de lectura, no se usa para crear
+  /// OP nuevas.
+  ordenProduccionLegacy  OrdenProduccion? @relation("OrdenLineaOrigenLegacy")
   archivosAdjuntos ArchivoAdjunto[]
 
+  @@index([ordenProduccionId], map: "idx_pedido_lineas_orden_produccion")
+  @@index([productoId], map: "idx_pedido_lineas_producto")
   @@map("pedido_lineas")
 }
 
@@ -810,4 +929,357 @@ view VOrdenesProduccionEstado {
   diasRestantes        Int?      @map("dias_restantes")
 
   @@map("v_ordenes_produccion_estado")
+}
+
+// ----------------------------------------------------------------------------
+// ATLAS — núcleo técnico del futuro módulo COMERCIAL (Sprint 0.1,
+// 2026-07-31; corrección arquitectónica 0.1.1, misma fecha; reclasificado
+// como núcleo de Comercial en Subfase 0.2 — ver docs/atlas/DECISIONES.md y
+// docs/atlas/ARQUITECTURA_COMERCIAL.md). ATLAS dejó de pensarse como un
+// módulo aislado: es el motor de Inbox/Leads/Contactos de un ecosistema
+// Comercial más amplio (que también incluirá Campañas, Automatizaciones,
+// Seguimientos, Embudos y Reportes, y absorberá al CRM actual). Los
+// nombres de modelo/tabla se mantienen "Atlas*"/"atlas_*" deliberadamente
+// — renombrarlos ahora, antes de que Campañas/Embudos/Automatizaciones
+// tengan siquiera un diseño, sería construir sobre una decisión de
+// nomenclatura que todavía puede cambiar.
+//
+// Capta, clasifica y da seguimiento a leads de Instagram, WhatsApp,
+// Facebook, TikTok y el catálogo público, ANTES de que exista un Pedido.
+// Deliberadamente separado de `Cliente` (ver clientes.service.js): Cliente
+// es identidad post-facturación (find-or-create solo al emitir
+// PEDIDO_FACTURADO); AtlasContacto existe desde el primer mensaje, mucho
+// antes — y puede no convertirse nunca. El vínculo hacia Pedido es opcional
+// y explícito (pedidoId), nunca una fusión de tablas. Cliente tampoco se
+// fusiona con AtlasContacto ahora — el puente entre "lead" y "cliente
+// facturado" queda documentado como trabajo futuro del módulo Comercial,
+// no como algo que esta fundación ya resuelve.
+//
+// Corrección 0.1.1: se separó identidad de PERSONA (AtlasContacto) de
+// identidad POR CANAL (AtlasIdentidadCanal) — un mismo humano que escribe
+// por Instagram, WhatsApp y el catálogo debe terminar siendo UN
+// AtlasContacto con TRES AtlasIdentidadCanal, no tres contactos sueltos.
+// La fusión entre identidades NUNCA es automática por nombre parecido —
+// solo por coincidencia fuerte y verificable (teléfono/email validado) o
+// fusión manual auditada (ver fusionarContactos en contactos.service.js).
+//
+// Borrador de fundación técnica: NO aplicado todavía contra la base real
+// (ver server/prisma/migrations_manual/0007_atlas_fundacion.sql).
+// ----------------------------------------------------------------------------
+
+/// La PERSONA — identidad comercial unificada, independiente de por cuántos
+/// canales haya escrito. Nunca contiene el identificador de un canal
+/// puntual (eso vive en AtlasIdentidadCanal) — así evitamos que el mismo
+/// humano escribiendo por Instagram y luego por WhatsApp cree dos
+/// contactos distintos.
+model AtlasContacto {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId           String    @map("empresa_id") @db.Uuid
+  empresa             Empresa   @relation(fields: [empresaId], references: [id])
+
+  nombrePreferido     String?   @map("nombre_preferido")
+  /// Solo se completa cuando ese teléfono ya fue VALIDADO en alguna
+  /// AtlasIdentidadCanal (ver identidades.service.js) — es el único dato
+  /// que contactos.service.js usa para intentar una fusión fuerte.
+  telefonoPrincipal   String?   @map("telefono_principal")
+  emailPrincipal      String?   @map("email_principal")
+
+  intencionActual     String?   @map("intencion_actual")
+  /// Ver TIPOS_CLIENTE en config.js. Default "no_clasificado".
+  tipoCliente         String    @default("no_clasificado") @map("tipo_cliente")
+  /// Ver ESTADOS_COMERCIALES en config.js. Default "nuevo".
+  estadoComercial     String    @default("nuevo") @map("estado_comercial")
+
+  ultimoContacto      DateTime? @map("ultimo_contacto") @db.Timestamptz(6)
+  proximaAccion       String?   @map("proxima_accion")
+
+  /// Consentimiento GENERAL (paraguas) — el detalle real, por canal
+  /// (fecha/fuente, estado de suscripción, motivo de baja), vive en
+  /// AtlasIdentidadCanal, porque alguien puede aceptar WhatsApp y bloquear
+  /// Instagram al mismo tiempo. Este campo es el "¿puedo contactar a esta
+  /// persona en general?" de un vistazo.
+  consentimiento      Boolean   @default(false)
+
+  /// Snapshot congelado del PRIMER touch de atribución (nunca se
+  /// sobreescribe una vez creado) y del ÚLTIMO touch (se reemplaza en cada
+  /// interacción nueva con UTM/fbclid presentes). Forma:
+  /// { utmSource, utmMedium, utmCampaign, utmContent, utmTerm, campaignId,
+  ///   adsetId, adId, fbclid, fechaAtribucion, urlEntrada, canal }
+  /// JSON (no 22 columnas planas) — ver DECISIONES.md, punto 6.
+  atribucionPrimerToque Json?   @map("atribucion_primer_toque")
+  atribucionUltimoToque Json?   @map("atribucion_ultimo_toque")
+
+  /// Vínculo OPCIONAL y explícito — nunca implica que AtlasContacto y
+  /// Cliente/Pedido sean la misma entidad. Se completa recién cuando el
+  /// lead genera de verdad una SolicitudPedido/Pedido real.
+  /// onDelete: SetNull — si algún día un Pedido se hard-elimina (no es el
+  /// patrón habitual, todo acá usa soft-delete), el contacto no debe
+  /// bloquear ni perder su propio historial por eso, solo pierde ESTE
+  /// vínculo puntual.
+  pedidoId            String?   @map("pedido_id") @db.Uuid
+  pedido              Pedido?   @relation(fields: [pedidoId], references: [id], onDelete: SetNull)
+
+  /// onDelete: SetNull — un usuario/empleado que se da de baja no debe
+  /// bloquear su borrado por ser responsable de contactos viejos.
+  responsableUsuarioId String?  @map("responsable_usuario_id") @db.Uuid
+  responsableUsuario   Usuario? @relation(fields: [responsableUsuarioId], references: [id], onDelete: SetNull)
+  etiquetas           String[]  @default([])
+
+  /// Fusión manual auditada (nunca automática): cuando dos AtlasContacto
+  /// resultan ser la misma persona, el "perdedor" queda con este campo
+  /// apuntando al sobreviviente en vez de borrarse — conserva el historial
+  /// completo (regla de Parte 5: "ningún mensaje se elimina" se extiende a
+  /// "ningún contacto se elimina al fusionar"). Ver fusionarContactos() —
+  /// esa función también es la que impide CICLOS (A fusionado a B y B
+  /// fusionado a A): Postgres no puede expresar "sin ciclos" en un FK
+  /// autorreferenciado, así que la validación vive en el service, igual
+  /// criterio que el resto de las reglas de negocio de este proyecto.
+  /// onDelete: Restrict — no se puede borrar un contacto al que OTROS ya
+  /// fueron fusionados sin resolver eso primero explícitamente.
+  /// Auditoría Subfase 0.3 (Punto 4a): la base real tiene además un CHECK
+  /// `fusionado_en_id <> id` (defensa adicional a nivel de columna, junto
+  /// con creariaCiclo() en contactos.service.js que cubre ciclos de más de
+  /// un nodo, que un CHECK no puede expresar). Prisma no soporta
+  /// restricciones CHECK en su DSL — no hay forma de reflejar esto acá,
+  /// solo queda documentado. Ver 0008_atlas_fundacion.sql.
+  fusionadoEnId       String?   @map("fusionado_en_id") @db.Uuid
+  fusionadoEn         AtlasContacto?  @relation("FusionContacto", fields: [fusionadoEnId], references: [id], onDelete: Restrict)
+  fusionesRecibidas   AtlasContacto[] @relation("FusionContacto")
+
+  creadoEn            DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn       DateTime  @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+
+  identidadesCanal    AtlasIdentidadCanal[]
+  tokensAtribucion    AtlasAtribucionToken[]
+
+  @@index([empresaId, estadoComercial])
+  /// Auditoría Subfase 0.3 (Punto 2): existe SOLO para poder ser el
+  /// destino de la FK compuesta de AtlasIdentidadCanal/AtlasAtribucionToken
+  /// — un contacto ya es único por `id` (PK), esto es la mitad "empresaId"
+  /// que una FK compuesta necesita del lado referenciado. Sin esto, una
+  /// identidad o un token podrían declarar una empresa distinta a la de su
+  /// propio contacto, ni siquiera con SQL directo lo permite ahora.
+  @@unique([id, empresaId], map: "uq_atlas_contactos_id_empresa")
+  @@map("atlas_contactos")
+}
+
+/// Una identidad POR CANAL — el mismo AtlasContacto puede tener varias (una
+/// de Instagram, una de WhatsApp, una del catálogo...). Es acá donde vive
+/// el identificador externo, y es la única unicidad real: "no repetir la
+/// misma identidad dentro de la empresa y el canal", no "no repetir la
+/// misma persona" (eso lo decide la fusión manual/fuerte, nunca esta
+/// constraint).
+model AtlasIdentidadCanal {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId           String    @map("empresa_id") @db.Uuid
+  empresa             Empresa   @relation(fields: [empresaId], references: [id])
+  atlasContactoId     String    @map("atlas_contacto_id") @db.Uuid
+  /// onDelete: Restrict — jamás se borra el historial de conversación
+  /// de un contacto de forma silenciosa/en cascada.
+  /// Auditoría Subfase 0.3 (Punto 2): relación COMPUESTA contra
+  /// AtlasContacto(id, empresaId), no solo contra su id — impide que esta
+  /// identidad declare una empresa distinta a la de su propio contacto, ni
+  /// siquiera con SQL directo. La FK directa hacia Empresa (arriba) queda
+  /// igual — es redundante en este modelo (atlasContactoId nunca es NULL
+  /// acá, así que la compuesta siempre alcanza), pero no incorrecta.
+  atlasContacto        AtlasContacto @relation(fields: [atlasContactoId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "fk_atlas_identidades_canal_contacto_empresa")
+
+  /// instagram | whatsapp | facebook | tiktok | catalogo (ver CANALES en
+  /// server/src/services/atlas/config.js).
+  canal               String
+  /// ID nativo de la plataforma (ID de Instagram, número de WhatsApp, PSID
+  /// de Messenger...).
+  identificadorExterno String   @map("identificador_externo")
+  /// ID interno del PROVEEDOR intermediario (ej. subscriber ID de
+  /// ManyChat) — distinto del identificador nativo de la plataforma;
+  /// puede no existir si se integra directo contra Meta/WhatsApp Cloud.
+  identificadorProveedor String? @map("identificador_proveedor")
+
+  nombreUsuario       String?   @map("nombre_usuario")
+  telefono            String?
+  email               String?
+  /// true solo cuando telefono/email de ESTA identidad fue confirmado por
+  /// un mecanismo real (respuesta a un código, coincidencia con Cliente
+  /// facturado, etc.) — jamás por defecto. Es la señal que
+  /// contactos.service.js exige para intentar una fusión fuerte.
+  verificado          Boolean   @default(false)
+
+  /// Datos crudos específicos del proveedor que no ameritan columna propia
+  /// (ej. metadata de ManyChat, campos de Graph API sin mapear todavía).
+  datosAdicionales    Json?     @map("datos_adicionales")
+
+  /// activo | inactivo | fusionado — "fusionado" cuando esta identidad se
+  /// reasignó a otro AtlasContacto tras una fusión manual (ver
+  /// fusionarContactos()), sin borrarla.
+  estado              String    @default("activo")
+
+  /// Consentimiento y salida — POR CANAL (Parte 7): alguien puede aceptar
+  /// mensajes de WhatsApp y estar bloqueado en Instagram al mismo tiempo.
+  consentimientoCanal   Boolean   @default(false) @map("consentimiento_canal")
+  consentimientoFecha   DateTime? @map("consentimiento_fecha") @db.Timestamptz(6)
+  consentimientoFuente  String?   @map("consentimiento_fuente")
+  /// activo | baja | bloqueado — ver ESTADOS_SUSCRIPCION en config.js.
+  estadoSuscripcion     String    @default("activo") @map("estado_suscripcion")
+  fechaBaja             DateTime? @map("fecha_baja") @db.Timestamptz(6)
+  motivoBloqueo         String?   @map("motivo_bloqueo")
+
+  primeraInteraccion  DateTime  @default(now()) @map("primera_interaccion") @db.Timestamptz(6)
+  ultimaInteraccion   DateTime  @default(now()) @map("ultima_interaccion") @db.Timestamptz(6)
+
+  conversaciones      AtlasConversacion[]
+
+  @@unique([empresaId, canal, identificadorExterno])
+  @@index([atlasContactoId])
+  @@map("atlas_identidades_canal")
+}
+
+/// Token público opaco para enlaces de atribución (?ref=<token>) — NUNCA el
+/// id interno de AtlasContacto. `token` es un valor aleatorio propio,
+/// deliberadamente distinto de `id`, para que ni exponiendo el token se
+/// pueda deducir ni enumerar contactos (ver atribucion.service.js).
+model AtlasAtribucionToken {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId         String    @map("empresa_id") @db.Uuid
+  empresa           Empresa   @relation(fields: [empresaId], references: [id])
+  /// NULLABLE (Auditoría Subfase 0.3, Punto 3): un token nace SIN contacto
+  /// cuando representa un clic anónimo de un anuncio o del catálogo —
+  /// recién se "reclama" (vincularTokenAContacto(), en
+  /// atribucion.service.js) cuando esa persona se identifica más
+  /// adelante. Flujo completo documentado en la cabecera de
+  /// atribucion.service.js y en DECISIONES.md, Decisión 13.
+  atlasContactoId   String?   @map("atlas_contacto_id") @db.Uuid
+  /// onDelete: Restrict — mismo criterio que el resto: no se pierde
+  /// silenciosamente el registro de atribución de un contacto.
+  /// Relación COMPUESTA (Punto 2, igual que AtlasIdentidadCanal) — a
+  /// diferencia de esa, acá la FK directa hacia Empresa (arriba) NO es
+  /// redundante: mientras el token es anónimo (atlasContactoId NULL),
+  /// Postgres no evalúa una FK compuesta con una columna NULL (MATCH
+  /// SIMPLE) — la FK directa es la ÚNICA que valida empresaId en ese
+  /// caso. Una vez reclamado el token, ambas se cumplen.
+  atlasContacto      AtlasContacto? @relation(fields: [atlasContactoId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "fk_atlas_atribucion_tokens_contacto_empresa")
+
+  /// Valor opaco expuesto en la URL — aleatorio (crypto.randomBytes), NO
+  /// derivado de ningún id interno. Ver crearTokenAtribucion().
+  token             String    @unique(map: "uq_atlas_atribucion_tokens_token")
+
+  canal             String?
+  campana           String?
+  anuncio           String?
+  utmSource         String?   @map("utm_source")
+  utmMedium         String?   @map("utm_medium")
+  utmCampaign       String?   @map("utm_campaign")
+  utmContent        String?   @map("utm_content")
+  utmTerm           String?   @map("utm_term")
+  campaignId        String?   @map("campaign_id")
+  adsetId           String?   @map("adset_id")
+  adId              String?   @map("ad_id")
+  fbclid            String?
+
+  /// Extensión Sprint 0.2-corrección (2026-07-31): nace preparado para más
+  /// plataformas/click-IDs que UTM/Meta puro, aunque hoy la mayoría llegue
+  /// vacía — agregarlos después de tener contactos reales sería una
+  /// migración con backfill imposible (el dato del touch original ya se
+  /// habría perdido para siempre).
+  placement         String?   // ubicación del anuncio (feed, stories, reels...)
+  device            String?   // mobile | desktop | tablet, tal como lo reporte el proveedor
+  gclid             String?   // Google Click ID
+  ttclid            String?   // TikTok Click ID
+  landingUrl        String?   @map("landing_url") // URL exacta de aterrizaje (con querystring)
+  referer           String?   // header Referer del navegador, si estaba disponible
+
+  fechaExpiracion   DateTime? @map("fecha_expiracion") @db.Timestamptz(6)
+  fechaPrimerUso    DateTime? @map("fecha_primer_uso") @db.Timestamptz(6)
+  cantidadUsos      Int       @default(0) @map("cantidad_usos")
+  /// activo | revocado
+  estado            String    @default("activo")
+
+  creadoEn          DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  @@index([atlasContactoId])
+  @@map("atlas_atribucion_tokens")
+}
+
+/// Idempotencia de webhooks (Parte 3 de la corrección): la MISMA
+/// interacción reenviada varias veces por Meta/ManyChat no puede crear
+/// varios mensajes/contactos/respuestas. Deliberadamente SIN empresaId: es
+/// una tabla técnica de deduplicación, no una entidad de negocio — todavía
+/// no sabemos a qué empresa/contacto pertenece un evento hasta procesarlo.
+model AtlasWebhookEvento {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// manychat | meta | whatsapp_cloud (proveedor técnico, no confundir con
+  /// `canal` de negocio — un proveedor puede servir varios canales).
+  proveedor           String
+  canal               String?
+  /// ID de evento del proveedor, cuando lo manda (no todos garantizan
+  /// uno estable) — dedup primario cuando existe.
+  eventIdExterno      String?  @map("event_id_externo")
+  /// sha256 del payload crudo — dedup de respaldo cuando eventIdExterno no
+  /// viene o no es confiable.
+  payloadHash         String   @map("payload_hash")
+  fechaRecibida       DateTime @default(now()) @map("fecha_recibida") @db.Timestamptz(6)
+  /// pendiente | procesado | error
+  estadoProcesamiento String   @default("pendiente") @map("estado_procesamiento")
+  cantidadIntentos    Int      @default(1) @map("cantidad_intentos")
+  ultimoError         String?  @map("ultimo_error")
+
+  // Auditoría Subfase 0.3 (Punto 1): un UNIQUE(proveedor, eventIdExterno)
+  // normal NO alcanza — Postgres permite múltiples NULL ahí, así que dos
+  // webhooks sin eventIdExterno nunca chocarían. La base real tiene DOS
+  // ÍNDICES ÚNICOS PARCIALES en su lugar: uno para proveedor+eventIdExterno
+  // WHERE eventIdExterno IS NOT NULL, otro para proveedor+payloadHash WHERE
+  // eventIdExterno IS NULL. Prisma no soporta índices parciales en su DSL
+  // (mismo caso ya documentado para OrdenProduccion más arriba) — este
+  // @@index es una aproximación SIN el WHERE parcial. NO correr
+  // `migrate dev`/`db push` sin revisar el diff. Ver
+  // 0008_atlas_fundacion.sql e idempotencia.service.js.
+  @@index([proveedor, eventIdExterno])
+  @@map("atlas_webhook_eventos")
+}
+
+/// Una conversación por (identidad de canal) — agrupa los mensajes de un
+/// mismo hilo dentro de ESE canal puntual (no del contacto unificado: si la
+/// misma persona escribe por Instagram y WhatsApp, son dos conversaciones,
+/// una por cada AtlasIdentidadCanal).
+model AtlasConversacion {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identidadCanalId    String   @map("identidad_canal_id") @db.Uuid
+  /// onDelete: Restrict — no se pierde una conversación entera borrando su
+  /// identidad de canal por accidente.
+  identidadCanal      AtlasIdentidadCanal @relation(fields: [identidadCanalId], references: [id], onDelete: Restrict)
+  /// `canal` se eliminó de acá (Auditoría Subfase 0.3, Punto 4b): duplicaba
+  /// identidadCanal.canal sin ninguna razón real — el canal de una
+  /// identidad no cambia nunca después de creada, así que no era un
+  /// snapshot con valor propio. Leer el canal de una conversación es
+  /// `conversacion.identidadCanal.canal`.
+  creadoEn            DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  mensajes            AtlasMensaje[]
+
+  @@index([identidadCanalId])
+  @@map("atlas_conversaciones")
+}
+
+/// Mensaje individual — "ningún mensaje se elimina" (Parte 5): esta tabla
+/// es de solo agregar filas, nunca update destructivo de contenido.
+model AtlasMensaje {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversacionId      String   @map("conversacion_id") @db.Uuid
+  /// onDelete: Restrict — regla dura del sprint: "ningún mensaje se
+  /// elimina" se extiende a nivel de FK, no solo de convención de código.
+  conversacion        AtlasConversacion @relation(fields: [conversacionId], references: [id], onDelete: Restrict)
+
+  /// entrante | saliente
+  direccion           String
+  /// cliente | automatico | humano — quién redactó este mensaje puntual.
+  origen              String
+  contenido           String
+  intencionDetectada  String?  @map("intencion_detectada")
+  /// Identificador del proveedor (ManyChat/Meta) para poder cruzar con
+  /// AtlasWebhookEvento si hace falta auditar de dónde vino.
+  idProveedor         String?  @map("id_proveedor")
+
+  creadoEn            DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  @@index([conversacionId])
+  @@map("atlas_mensajes")
 }
