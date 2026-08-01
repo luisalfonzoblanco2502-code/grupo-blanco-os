@@ -187,3 +187,150 @@ export async function obtenerResumenDashboard(empresaId) {
     })),
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Panel General (Home ejecutivo, 2026-08-01) — distinto de "Centro de
+// Control Diario" arriba (ese sigue siendo la vista operativa de
+// Producción, sin tocar). Esto es el resumen comercial/financiero que se
+// ve al entrar al sistema.
+//
+// Decisión explícita del usuario: TODO con datos reales, sin inventar
+// márgenes ni empresas de ejemplo — hoy solo existe 1 fila en `empresas`
+// (Grupo Blanco) y muy pocos DocumentoVenta/CostoPedido reales (el
+// Facturador Administrativo/Registrar Pago todavía no está activo en
+// producción), así que la mayoría de estos números van a verse en cero o
+// casi — es lo honesto, no un bug. "Ganancias" usa utilidadReal/
+// utilidadEstimada de CostoPedido (dato real, aunque disperso), nunca un
+// margen inventado.
+function inicioDelMes(fecha = new Date()) {
+  const d = new Date(fecha);
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function inicioMesAnterior(fecha = new Date()) {
+  const d = inicioDelMes(fecha);
+  d.setMonth(d.getMonth() - 1);
+  return d;
+}
+function variacionPorcentual(actual, anterior) {
+  if (!anterior) return null; // sin base real de comparación — no se inventa un "0%" ni un "100%"
+  return Math.round(((actual - anterior) / anterior) * 100);
+}
+
+export async function obtenerPanelGeneral(empresaId) {
+  const hoy = inicioDelDia();
+  const finHoy = finDelDia();
+  const ayer = new Date(hoy);
+  ayer.setDate(ayer.getDate() - 1);
+  const finAyer = new Date(finHoy);
+  finAyer.setDate(finAyer.getDate() - 1);
+  const inicioMes = inicioDelMes();
+  const inicioMesAnt = inicioMesAnterior();
+  const hace7dias = new Date(hoy);
+  hace7dias.setDate(hace7dias.getDate() - 6);
+  const en3dias = new Date(finHoy);
+  en3dias.setDate(en3dias.getDate() + 3);
+
+  const [empresas, documentos, costos, ordenes, lineasPorProducto] = await Promise.all([
+    prisma.empresa.findMany({ select: { id: true, nombre: true } }),
+    // Ventana amplia (desde el inicio del mes anterior) para poder derivar
+    // hoy/ayer/mes/mes anterior/tendencia 7 días de UNA sola consulta, en
+    // vez de 5 consultas separadas.
+    prisma.documentoVenta.findMany({
+      where: { fechaEmision: { gte: inicioMesAnt }, estado: "EMITIDO" },
+      select: { total: true, fechaEmision: true, empresaId: true },
+    }),
+    prisma.costoPedido.findMany({
+      where: { creadoEn: { gte: inicioMesAnt } },
+      select: { utilidadReal: true, utilidadEstimada: true, creadoEn: true, empresaId: true },
+    }),
+    prisma.ordenProduccion.findMany({
+      where: { empresaId, eliminadoEn: null },
+      select: {
+        id: true,
+        pedidoId: true,
+        cantidad: true,
+        producto: true,
+        etapaId: true,
+        fechaEntregaReal: true,
+        etapa: { select: { orden: true } },
+        pedido: { select: { id: true, fechaCompromiso: true } },
+      },
+    }),
+    prisma.pedidoLinea.groupBy({
+      by: ["producto"],
+      where: { empresaId },
+      _sum: { cantidad: true },
+      orderBy: { _sum: { cantidad: "desc" } },
+      take: 1,
+    }),
+  ]);
+
+  const sumaTotal = (docs) => docs.reduce((s, d) => s + Number(d.total), 0);
+  const enRango = (fecha, desde, hasta) => fecha >= desde && (!hasta || fecha <= hasta);
+
+  const ventasHoy = sumaTotal(documentos.filter((d) => enRango(d.fechaEmision, hoy, finHoy)));
+  const ventasAyer = sumaTotal(documentos.filter((d) => enRango(d.fechaEmision, ayer, finAyer)));
+  const ventasMes = sumaTotal(documentos.filter((d) => enRango(d.fechaEmision, inicioMes)));
+  const ventasMesAnterior = sumaTotal(documentos.filter((d) => enRango(d.fechaEmision, inicioMesAnt, new Date(inicioMes - 1))));
+
+  const utilidad = (c) => Number(c.utilidadReal ?? c.utilidadEstimada ?? 0);
+  const gananciasMes = costos.filter((c) => enRango(c.creadoEn, inicioMes)).reduce((s, c) => s + utilidad(c), 0);
+  const gananciasMesAnterior = costos
+    .filter((c) => enRango(c.creadoEn, inicioMesAnt, new Date(inicioMes - 1)))
+    .reduce((s, c) => s + utilidad(c), 0);
+
+  const tendencia7dias = [...Array(7)].map((_, i) => {
+    const dia = new Date(hace7dias);
+    dia.setDate(dia.getDate() + i);
+    const finDia = new Date(dia);
+    finDia.setHours(23, 59, 59, 999);
+    return {
+      dia: dia.toISOString().slice(0, 10),
+      ventas: sumaTotal(documentos.filter((d) => enRango(d.fechaEmision, dia, finDia))),
+    };
+  });
+
+  // Tasa de cumplimiento: de las OPs ya entregadas (fechaEntregaReal
+  // presente), qué porcentaje llegó a tiempo o antes del compromiso. Sin
+  // entregas todavía, no hay base real para el porcentaje — null, no 0%.
+  const entregadas = ordenes.filter((o) => o.fechaEntregaReal);
+  const aTiempo = entregadas.filter((o) => new Date(o.fechaEntregaReal) <= new Date(o.pedido.fechaCompromiso));
+  const tasaCumplimiento = entregadas.length > 0 ? Math.round((aTiempo.length / entregadas.length) * 100) : null;
+
+  const etapaMaxima = Math.max(1, ...ordenes.map((o) => o.etapa.orden));
+  const activas = ordenes.filter((o) => o.etapa.orden < etapaMaxima);
+  const enRiesgo = activas.filter((o) => {
+    const situacion = calcularSituacionEntrega({ fechaEntregaReal: o.fechaEntregaReal, fechaCompromiso: o.pedido.fechaCompromiso });
+    return situacion === "Atrasado" || situacion === "Urgente";
+  });
+  const pedidosPorVencer = new Set(
+    activas
+      .filter((o) => new Date(o.pedido.fechaCompromiso) >= hoy && new Date(o.pedido.fechaCompromiso) <= en3dias)
+      .map((o) => o.pedidoId)
+  );
+
+  const porEmpresa = empresas.map((e) => {
+    const docsEmpresa = documentos.filter((d) => d.empresaId === e.id);
+    const ventas = sumaTotal(docsEmpresa.filter((d) => enRango(d.fechaEmision, inicioMes)));
+    const ventasAnt = sumaTotal(docsEmpresa.filter((d) => enRango(d.fechaEmision, inicioMesAnt, new Date(inicioMes - 1))));
+    return { nombre: e.nombre, ventas, variacion: variacionPorcentual(ventas, ventasAnt) };
+  });
+
+  return {
+    ventasHoy,
+    variacionVentasVsAyer: variacionPorcentual(ventasHoy, ventasAyer),
+    gananciasMes,
+    variacionGananciasVsMesAnterior: variacionPorcentual(gananciasMes, gananciasMesAnterior),
+    tasaCumplimiento,
+    ordenesEnProduccion: activas.length,
+    ordenesEnRiesgo: enRiesgo.length,
+    pedidosPorVencer3Dias: pedidosPorVencer.size,
+    topProducto: lineasPorProducto[0]
+      ? { nombre: lineasPorProducto[0].producto, unidades: lineasPorProducto[0]._sum.cantidad }
+      : null,
+    porEmpresa,
+    tendencia7dias,
+  };
+}
