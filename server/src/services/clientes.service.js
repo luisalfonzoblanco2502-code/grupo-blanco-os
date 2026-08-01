@@ -10,12 +10,19 @@ function normalizar(nombre) {
   return nombre.trim();
 }
 
-// Búsqueda simple para el autocompletar de "Nuevo Pedido" — identidad
-// solamente, no calcula agregados (eso es listarFichasClientes, para CRM).
+// Búsqueda para el autocompletar de "Nuevo Pedido" — identidad solamente,
+// no calcula agregados (eso es listarFichasClientes, para CRM). Busca por
+// nombre, teléfono O cédula (Nuevo Pedido rediseñado): una vendedora puede
+// tipear cualquiera de los tres y encontrar al cliente igual.
 export function buscarClientes(empresaId, texto) {
   const where = { empresaId };
-  if (texto?.trim()) {
-    where.nombre = { contains: texto.trim(), mode: "insensitive" };
+  const t = texto?.trim();
+  if (t) {
+    where.OR = [
+      { nombre: { contains: t, mode: "insensitive" } },
+      { telefono: { contains: t, mode: "insensitive" } },
+      { cedula: { contains: t, mode: "insensitive" } },
+    ];
   }
   return prisma.cliente.findMany({
     where,
@@ -24,11 +31,22 @@ export function buscarClientes(empresaId, texto) {
   });
 }
 
+// Coincidencia exacta por teléfono o cédula — para avisar "ya registrado"
+// con un mensaje claro ANTES de intentar crear un duplicado, en vez de un
+// error genérico de la base.
+export async function buscarClientePorTelefonoOCedula(empresaId, { telefono, cedula }) {
+  const or = [];
+  if (telefono?.trim()) or.push({ telefono: telefono.trim() });
+  if (cedula?.trim()) or.push({ cedula: cedula.trim() });
+  if (or.length === 0) return null;
+  return prisma.cliente.findFirst({ where: { empresaId, OR: or } });
+}
+
 // Alta manual desde "Nuevo Pedido" ("crear cliente sin abandonar el
 // formulario") — a diferencia de obtenerOCrearCliente (que solo tiene
 // nombre, disponible al facturar), acá la vendedora sí puede cargar
-// teléfono/email/dirección de una vez.
-export async function crearClienteManual(empresaId, { nombre, telefono, email, direccion }) {
+// cédula/teléfono/email/dirección de una vez.
+export async function crearClienteManual(empresaId, { nombre, cedula, telefono, email, direccion }) {
   if (!nombre?.trim()) throw new ValidacionError("El nombre del cliente es obligatorio");
   const existente = await prisma.cliente.findUnique({
     where: { empresaId_nombre: { empresaId, nombre: nombre.trim() } },
@@ -36,10 +54,17 @@ export async function crearClienteManual(empresaId, { nombre, telefono, email, d
   if (existente) {
     throw new ValidacionError(`Ya existe un cliente con el nombre "${nombre.trim()}"`);
   }
+  const duplicado = await buscarClientePorTelefonoOCedula(empresaId, { telefono, cedula });
+  if (duplicado) {
+    throw new ValidacionError(
+      `Ya hay un cliente registrado con ese teléfono o cédula: "${duplicado.nombre}" — buscalo arriba en vez de crear uno nuevo`
+    );
+  }
   return prisma.cliente.create({
     data: {
       empresaId,
       nombre: nombre.trim(),
+      cedula: cedula?.trim() || null,
       telefono: telefono?.trim() || null,
       email: email?.trim() || null,
       direccion: direccion?.trim() || null,

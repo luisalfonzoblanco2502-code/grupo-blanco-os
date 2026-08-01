@@ -685,6 +685,10 @@ model Cliente {
   empresaId  String   @map("empresa_id") @db.Uuid
   empresa    Empresa  @relation(fields: [empresaId], references: [id])
   nombre     String
+  /// Nuevo Pedido rediseñado (2026-08-01) — obligatoria a nivel de
+  /// aplicación para clientes NUEVOS (empresas de envío la piden), nullable
+  /// en la base para no romper clientes ya existentes sin cédula cargada.
+  cedula     String?
   telefono   String?
   email      String?
   direccion  String?
