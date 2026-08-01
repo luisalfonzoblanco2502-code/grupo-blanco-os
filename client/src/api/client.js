@@ -41,11 +41,27 @@ export const api = {
     request(`/pedidos/${id}/facturar`, { method: "POST", body: JSON.stringify(data) }),
   cambiarEstadoPedido: (id, estadoNuevo) =>
     request(`/pedidos/${id}/estado`, { method: "PATCH", body: JSON.stringify({ estadoNuevo }) }),
+  registrarPago: (id, data) => request(`/pedidos/${id}/pagos`, { method: "POST", body: JSON.stringify(data) }),
+  getPagos: (id) => request(`/pedidos/${id}/pagos`),
+
+  getLineasPedido: (pedidoId) => request(`/pedidos/${pedidoId}/lineas`),
+  crearLineaPedido: (pedidoId, data) =>
+    request(`/pedidos/${pedidoId}/lineas`, { method: "POST", body: JSON.stringify(data) }),
+  actualizarLineaPedido: (lineaId, data) =>
+    request(`/pedidos/lineas/${lineaId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  duplicarLineaPedido: (lineaId) => request(`/pedidos/lineas/${lineaId}/duplicar`, { method: "POST" }),
+  eliminarLineaPedido: (lineaId) => request(`/pedidos/lineas/${lineaId}`, { method: "DELETE" }),
+
+  getSugerenciasTecnicas: () => request("/pedidos/sugerencias-tecnicas"),
+  getCalidadDatosTecnicos: () => request("/pedidos/calidad-datos"),
 
   registrarLogin: () => request("/auth/login-evento", { method: "POST" }),
   registrarLogout: () => request("/auth/logout-evento", { method: "POST" }),
 
   getUsuarios: () => request("/usuarios"),
+
+  buscarClientes: (q) => request(`/clientes${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  crearCliente: (data) => request("/clientes", { method: "POST", body: JSON.stringify(data) }),
 
   getOrdenesProduccion: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
@@ -73,4 +89,38 @@ export const api = {
     request(`/solicitudes/${id}/estado`, { method: "PATCH", body: JSON.stringify(data) }),
   convertirSolicitud: (id, data) =>
     request(`/solicitudes/${id}/convertir`, { method: "POST", body: JSON.stringify(data) }),
+
+  // Núcleo de Facturación Administrativa: ahora sobre tablas reales (ver
+  // server/prisma/migrations_manual/0002_facturador_administrativo.sql).
+  getDocumentosVenta: () => request("/nucleo-facturacion/documentos"),
+  getDocumentoPorPedido: (pedidoId) => request(`/nucleo-facturacion/documentos/${pedidoId}`),
+
+  getItemsInventario: () => request("/nucleo-facturacion/inventario/items"),
+  getInventarioAlertas: () => request("/nucleo-facturacion/inventario/alertas"),
+  getInventarioMovimientos: () => request("/nucleo-facturacion/inventario/movimientos"),
+  crearItemInventario: (data) =>
+    request("/nucleo-facturacion/inventario/items", { method: "POST", body: JSON.stringify(data) }),
+  registrarEntradaInventario: (id, data) =>
+    request(`/nucleo-facturacion/inventario/items/${id}/entrada`, { method: "POST", body: JSON.stringify(data) }),
+
+  getProductosInternos: () => request("/nucleo-facturacion/productos-internos"),
+  getProductoInterno: (id) => request(`/nucleo-facturacion/productos-internos/${id}`),
+  crearProductoInterno: (data) =>
+    request("/nucleo-facturacion/productos-internos", { method: "POST", body: JSON.stringify(data) }),
+  agregarInsumoProducto: (id, data) =>
+    request(`/nucleo-facturacion/productos-internos/${id}/insumos`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  quitarInsumoProducto: (insumoId) =>
+    request(`/nucleo-facturacion/productos-internos/insumos/${insumoId}`, { method: "DELETE" }),
+
+  getCrmClientes: () => request("/nucleo-facturacion/crm/clientes"),
+  getCostos: () => request("/nucleo-facturacion/costos"),
+  getIndicadoresFacturacion: () => request("/nucleo-facturacion/indicadores"),
+  getCajasCuentas: () => request("/nucleo-facturacion/cajas-cuentas"),
+
+  // ATLAS — Centro de Atención Inteligente (Sprint 0.1, 2026-07-31)
+  getAtlasResumen: () => request("/atlas/metricas/resumen"),
+  getAtlasContactos: () => request("/atlas/contactos"),
 };

@@ -21,6 +21,8 @@ export function ProductoEdit() {
   const [publicadoCatalogo, setPublicadoCatalogo] = useState(true);
   const [disponible, setDisponible] = useState(true);
   const [escalones, setEscalones] = useState([{ ...ESCALON_VACIO }]);
+  const [productoInternoId, setProductoInternoId] = useState("");
+  const [productosInternos, setProductosInternos] = useState([]);
   const [error, setError] = useState(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -36,6 +38,7 @@ export function ProductoEdit() {
         setPrecioBase(String(p.precioBase));
         setPublicadoCatalogo(p.publicadoCatalogo);
         setDisponible(p.disponible);
+        setProductoInternoId(p.productoInternoId ?? "");
         setEscalones(
           p.preciosVolumen.length > 0
             ? p.preciosVolumen.map((e) => ({
@@ -47,6 +50,7 @@ export function ProductoEdit() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setCargando(false));
+    api.getProductosInternos().then(setProductosInternos).catch(() => {});
   }, [id]);
 
   function actualizarEscalon(index, cambios) {
@@ -75,6 +79,7 @@ export function ProductoEdit() {
         publicadoCatalogo,
         disponible,
         preciosVolumen,
+        productoInternoId: productoInternoId || null,
       });
       navigate("/productos");
     } catch (err) {
@@ -139,6 +144,21 @@ export function ProductoEdit() {
           <input type="checkbox" checked={disponible} onChange={(e) => setDisponible(e.target.checked)} />{" "}
           Disponible (desmarcar si está agotado)
         </label>
+        <label>
+          Producto interno vinculado (opcional)
+          <select value={productoInternoId} onChange={(e) => setProductoInternoId(e.target.value)}>
+            <option value="">— Sin vincular —</option>
+            {productosInternos.map((pi) => (
+              <option key={pi.id} value={pi.id}>
+                {pi.codigo} — {pi.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="card-label" style={{ marginTop: "-0.5rem" }}>
+          Solo necesario si este producto debe reservar/consumir inventario real al facturarse. Sin vincular, se
+          vende exactamente igual que hoy.
+        </p>
 
         <fieldset>
           <legend>Precios por volumen (opcional)</legend>

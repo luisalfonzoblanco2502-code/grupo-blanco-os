@@ -11,11 +11,22 @@ la misma base de datos (tabla `empresas`, todo lo demás scoped por `empresaId`)
 de sublimación: pañoletas, pareos, t-shirts, jerseys), pero las decisiones de este ERP pueden
 afectar a las otras empresas del grupo — no asumir que un cambio es "solo de PanaPrice".
 
-Módulos con código real hoy: **Pedidos** (cabecera comercial), **Producción** (órdenes de
-producción con pipeline de etapas), **Catálogo público + Solicitudes de pedido** (ver abajo).
-Facturación, Inventario, Contabilidad, Finanzas, Marketing y CRM todavía no existen como
-módulos propios — "facturar" hoy es solo una transición de estado de `Pedido`
-(`FACTURADO`), no una entidad `Factura`.
+**Módulos activos en producción hoy** (backend + frontend desplegados y en uso real):
+**Pedidos** (cabecera comercial, con captura compacta desde Producto Maestro e idempotencia
+contra doble envío), **Producción** (órdenes de producción con pipeline de etapas), **Productos
+/ Producto Maestro** (ficha técnica permanente + precio por volumen), **Catálogo público +
+Solicitudes de pedido** (ver abajo). "Facturar" hoy es solo una transición de estado de
+`Pedido` (`FACTURADO`), no una entidad `Factura` separada.
+
+**Módulos en construcción, NO activos en producción** (código existe pero su backend no está
+desplegado — por eso están ocultos del menú del ERP en `client/src/nav/modules.js`):
+**Registrar Pago** (backend listo, bloqueado porque su única vía de creación de
+`DocumentoVenta` depende del listener de Núcleo de Facturación, que a su vez activaría
+Inventario/CRM/Costos de una sola vez — pendiente de separar); **Inventario, ATLAS (Centro de
+Atención), CRM y Centro Financiero** (pantallas de frontend ya escritas en
+`client/src/pages/{inventario,atlas,crm,financiero}/`, sin API real conectada — ATLAS además
+tiene su fundación de base de datos diseñada pero sin migrar a la base real). No asumir que
+estos módulos funcionan solo porque el archivo existe.
 
 ## Stack técnico (real, verificado en código — no asumir por nombres de carpeta)
 
@@ -140,6 +151,19 @@ npm run dev   # http://localhost:5174
 
 - Estilo de código: comentarios explican el *por qué* de una decisión no obvia (ver el propio
   `schema.prisma` y los `*.service.js` como referencia de tono), no el *qué* hace el código.
+- **Principio de UX permanente, en todos los módulos: "Primero sugerir, nunca obligar".**
+  El sistema ayuda reutilizando información que YA existe (autocompletar por historial,
+  valores frecuentes sugeridos) en vez de imponer catálogos cerrados o campos obligatorios
+  nuevos. Un campo de texto libre puede sugerir sin restringir — nunca convertirse en un
+  dropdown rígido solo por prolijidad. Precedente: sugerencias técnicas de `pedido_lineas`
+  (tela/color/tipo de impresión/etc., Sprint de calidad de datos) — sigue siendo texto libre,
+  el sistema solo sugiere lo ya usado.
+- **Principio permanente de proceso, en todo el proyecto: "Arquitectura aprobada antes de
+  implementar".** Toda funcionalidad nueva se presenta y se aprueba primero como diseño
+  (qué datos guarda, qué límites tiene, cómo se conecta con lo existente) antes de escribir
+  código — corregir un documento cuesta minutos, corregir datos reales ya guardados cuesta
+  mucho más. Formalizado por primera vez en `docs/atlas/VISION.md` (Sprint ATLAS 0.2,
+  2026-07-31), pero no es exclusivo de ATLAS/Comercial.
 - Gestión de dependencias:
 - Estrategia de ramas / commits:
 - Cómo correr tests:

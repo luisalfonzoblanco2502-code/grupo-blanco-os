@@ -10,13 +10,27 @@ import { requireAuth } from "./middleware/auth.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { pedidosRouter } from "./routes/pedidos.routes.js";
+import { clientesRouter } from "./routes/clientes.routes.js";
 import { ordenesProduccionRouter } from "./routes/ordenesProduccion.routes.js";
+// Import de efecto lateral: registra los listeners del Núcleo de
+// Facturación Administrativa (Administración/Inventario/CRM/Costos/
+// Indicadores) sobre PEDIDO_FACTURADO. Va DESPUÉS de ordenesProduccionRouter
+// a propósito — así Producción ya registró su listener primero y siempre
+// corre antes que estos dentro del mismo emit() (ver eventBus.js: los
+// listeners corren en orden de registro).
+import "./nucleoFacturacion.js";
+import { nucleoFacturacionRouter } from "./routes/nucleoFacturacion.routes.js";
 import { etapasRouter } from "./routes/etapas.routes.js";
 import { prioridadesRouter } from "./routes/prioridades.routes.js";
 import { usuariosRouter } from "./routes/usuarios.routes.js";
 import { productosRouter } from "./routes/productos.routes.js";
 import { solicitudesRouter } from "./routes/solicitudes.routes.js";
 import { publicoRouter } from "./routes/publico.routes.js";
+// ATLAS — Centro de Atención Inteligente (Sprint 0.1, 2026-07-31). Solo la
+// API autenticada (staff, client/); atlasWebhooksRouter (público, para
+// Instagram/WhatsApp) existe pero NO se monta todavía — ver nota en
+// atlasWebhooks.routes.js.
+import { atlasRouter } from "./routes/atlas.routes.js";
 
 export const app = express();
 
@@ -36,12 +50,15 @@ app.use("/api/publico", publicoRouter);
 app.use("/api/auth", requireAuth, authRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/pedidos", requireAuth, pedidosRouter);
+app.use("/api/clientes", requireAuth, clientesRouter);
 app.use("/api/ordenes-produccion", requireAuth, ordenesProduccionRouter);
+app.use("/api/nucleo-facturacion", requireAuth, nucleoFacturacionRouter);
 app.use("/api/etapas", requireAuth, etapasRouter);
 app.use("/api/prioridades", requireAuth, prioridadesRouter);
 app.use("/api/usuarios", requireAuth, usuariosRouter);
 app.use("/api/productos", requireAuth, productosRouter);
 app.use("/api/solicitudes", requireAuth, solicitudesRouter);
+app.use("/api/atlas", requireAuth, atlasRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Ruta no encontrada" });

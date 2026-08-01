@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -19,8 +19,14 @@ export function ProductoNew() {
   const [publicadoCatalogo, setPublicadoCatalogo] = useState(true);
   const [disponible, setDisponible] = useState(true);
   const [escalones, setEscalones] = useState([{ ...ESCALON_VACIO }]);
+  const [productoInternoId, setProductoInternoId] = useState("");
+  const [productosInternos, setProductosInternos] = useState([]);
   const [error, setError] = useState(null);
   const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    api.getProductosInternos().then(setProductosInternos).catch(() => {});
+  }, []);
 
   function actualizarEscalon(index, cambios) {
     setEscalones((prev) => prev.map((e, i) => (i === index ? { ...e, ...cambios } : e)));
@@ -48,6 +54,7 @@ export function ProductoNew() {
         publicadoCatalogo,
         disponible,
         preciosVolumen,
+        productoInternoId: productoInternoId || undefined,
       });
       navigate(`/productos`, { state: { creado: producto.id } });
     } catch (err) {
@@ -110,6 +117,21 @@ export function ProductoNew() {
           <input type="checkbox" checked={disponible} onChange={(e) => setDisponible(e.target.checked)} />{" "}
           Disponible (desmarcar si está agotado)
         </label>
+        <label>
+          Producto interno vinculado (opcional)
+          <select value={productoInternoId} onChange={(e) => setProductoInternoId(e.target.value)}>
+            <option value="">— Sin vincular —</option>
+            {productosInternos.map((pi) => (
+              <option key={pi.id} value={pi.id}>
+                {pi.codigo} — {pi.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="card-label" style={{ marginTop: "-0.5rem" }}>
+          Solo necesario si este producto debe reservar/consumir inventario real al facturarse. Sin vincular, se
+          vende exactamente igual que hoy.
+        </p>
 
         <fieldset>
           <legend>Precios por volumen (opcional)</legend>

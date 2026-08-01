@@ -7,6 +7,8 @@ import {
   consultarRastreo,
   textoMensajePedido,
 } from "./api";
+import { initMetaPixel, trackMetaEvent } from "./metaPixel";
+import { capturarUtms } from "./utm";
 
 // Vive acá (no en pdf.js) a propósito: pdf.js importa jsPDF, una librería
 // pesada (~200KB gzip) que NO debe entrar al bundle inicial del catálogo
@@ -696,6 +698,36 @@ function ProductoCard({ producto, onAgregar, acumuladoCategoriaActual, tarifaAbi
   // producto no tiene escala (else de arriba), esto simplemente no se usa.
   const mejorPrecio = escala ? escala[escala.length - 1].precioUnitario : null;
 
+  // ViewContent (Meta): una sola vez por tarjeta por sesión, cuando el
+  // producto realmente entra en pantalla (no al montarse — muchas tarjetas
+  // están fuera de vista al cargar la grilla). El ref de "ya disparado" es
+  // local a esta instancia: cada ProductoCard es un producto, no hace
+  // falta un Set global para deduplicar entre tarjetas.
+  const contenedorRef = useRef(null);
+  const viewContentDisparado = useRef(false);
+  useEffect(() => {
+    const el = contenedorRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entradas) => {
+        if (viewContentDisparado.current || !entradas[0]?.isIntersecting) return;
+        viewContentDisparado.current = true;
+        trackMetaEvent("ViewContent", {
+          content_ids: [producto.codigo],
+          content_type: "product",
+          content_name: producto.nombre,
+          value: unitarioSubtotal,
+          currency: "USD",
+        });
+        observer.disconnect();
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [producto.codigo]);
+
   function restar() {
     setCantidad((c) => Math.max(1, c - 1));
   }
@@ -714,7 +746,7 @@ function ProductoCard({ producto, onAgregar, acumuladoCategoriaActual, tarifaAbi
   const badge = producto.badge ?? BADGES_DEMO[producto.codigo] ?? null;
 
   return (
-    <div className="producto-card">
+    <div className="producto-card" ref={contenedorRef}>
       <div className="producto-imagen-wrap">
         {producto.imagenUrl && !imagenRota ? (
           <img
@@ -869,6 +901,23 @@ export function App() {
       .finally(() => setCargando(false));
   }, []);
 
+  // Meta Pixel: se inicializa una sola vez. Si VITE_META_PIXEL_ID no está
+  // configurado, initMetaPixel() no hace nada (ver metaPixel.js) — esto
+  // nunca puede romper el catálogo por sí solo. capturarUtms() es
+  // independiente del pixel (queda guardado igual aunque no haya Pixel ID).
+  useEffect(() => {
+    capturarUtms();
+    initMetaPixel();
+  }, []);
+
+  // PageView "virtual": esta es una SPA de una sola página real, así que
+  // cada cambio de `vista` (catalogo/checkout/confirmacion) es lo más
+  // parecido a una vista de página nueva — mismo criterio que recomienda
+  // Meta para sitios de una sola página.
+  useEffect(() => {
+    trackMetaEvent("PageView");
+  }, [vista]);
+
   // Buscador + barra de categorías: puramente client-side sobre lo que ya
   // trajo getProductos() — no dispara ninguna consulta nueva.
   const productosFiltrados = useMemo(() => {
@@ -902,6 +951,19 @@ export function App() {
       }
       return [...prev, { clave: `${producto.id}-${Date.now()}`, producto, cantidad, disenoNotas: "", tipo: "catalogo" }];
     });
+
+    // Mismo cálculo que ProductoCard (precioUnitarioLinea sobre la cantidad
+    // acumulada proyectada) — no se le agrega un parámetro nuevo a
+    // onAgregar solo para esto, se recalcula acá con lo que ya tiene App().
+    const cantidadProyectada = (acumuladoPorCategoriaEnCarrito[producto.categoria] || 0) + cantidad;
+    const unitario = precioUnitarioLinea(producto, cantidad, cantidadProyectada);
+    trackMetaEvent("AddToCart", {
+      content_ids: [producto.codigo],
+      content_type: "product",
+      contents: [{ id: producto.codigo, quantity: cantidad }],
+      value: unitario * cantidad,
+      currency: "USD",
+    });
   }
 
   // Un diseño subido en "Personaliza tus diseños" se agrega al MISMO
@@ -932,6 +994,16 @@ export function App() {
         previewUrl: diseno.previewUrl,
       },
     ]);
+
+    // value: 0 — un diseño propio siempre es "a cotizar", no tiene un
+    // precio real todavía (ver comentario de productoSintetico arriba).
+    trackMetaEvent("AddToCart", {
+      content_ids: [productoSintetico.codigo],
+      content_type: "product",
+      contents: [{ id: productoSintetico.codigo, quantity: diseno.cantidad }],
+      value: 0,
+      currency: "USD",
+    });
   }
 
   function actualizarLinea(clave, cambios) {
@@ -977,6 +1049,22 @@ export function App() {
     }
     cantidadPrevia.current = cantidadTotal;
   }, [cantidadTotal]);
+
+  // InitiateCheckout (Meta): una vez por CADA vez que se entra a checkout
+  // (no en cada render mientras ya se está ahí) — mismo patrón de ref que
+  // el bump de arriba, solo que acá dispara en la transición en vez de en
+  // un aumento de cantidad.
+  const vistaAnterior = useRef(vista);
+  useEffect(() => {
+    if (vista === "checkout" && vistaAnterior.current !== "checkout") {
+      trackMetaEvent("InitiateCheckout", {
+        value: total,
+        num_items: cantidadTotal,
+        currency: "USD",
+      });
+    }
+    vistaAnterior.current = vista;
+  }, [vista, total, cantidadTotal]);
 
   // Resumen por categoría (para el bloque del carrito y el mensaje de
   // WhatsApp): cuántas unidades de esa categoría hay en total, qué escalón
@@ -1038,6 +1126,18 @@ export function App() {
     if (!ordenFinal) ordenFinal = numeroOrdenLocal();
     setNumeroOrden(ordenFinal);
     setNumeroOrdenRastreable(ordenEsReal);
+
+    // Lead (Meta): el cliente completó y envió el formulario de pedido —
+    // esto es un lead real desde su perspectiva sin importar si el
+    // registro en el ERP tuvo éxito (eso es una preocupación de
+    // confiabilidad de backend, no debería ocultar la señal de marketing).
+    // NUNCA se manda Purchase acá: esto es una solicitud/borrador, no una
+    // venta confirmada (ver metaPixel.js).
+    trackMetaEvent("Lead", {
+      value: total,
+      currency: "USD",
+      content_ids: lineasConSubtotal.map((l) => l.producto.codigo),
+    });
 
     setPasoEnvio("Generando tu Orden Comercial en PDF...");
     try {

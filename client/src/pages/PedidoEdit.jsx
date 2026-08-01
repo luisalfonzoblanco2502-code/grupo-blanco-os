@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { PedidoForm } from "../components/PedidoForm";
+import { useToast } from "../components/ToastContext";
 
 export function PedidoEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { mostrarToast } = useToast();
   const [pedido, setPedido] = useState(null);
   const [error, setError] = useState(null);
   const [enviando, setEnviando] = useState(false);
@@ -19,6 +21,7 @@ export function PedidoEdit() {
     setEnviando(true);
     try {
       await api.updatePedido(id, datos);
+      mostrarToast("Cambios guardados correctamente");
       navigate(`/pedidos/${id}`);
     } catch (err) {
       setError(err.message);

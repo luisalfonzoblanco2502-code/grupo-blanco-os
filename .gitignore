@@ -4,3 +4,10 @@ dist/
 server/prisma/dev.db
 server/prisma/dev.db-journal
 *.log
+
+# Respaldos lógicos (contienen datos de clientes/pedidos reales o de prueba
+# — nunca se versionan, ver server/backups/README).
+server/backups/
+
+.vercel
+.env*

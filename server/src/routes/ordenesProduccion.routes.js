@@ -6,14 +6,21 @@ export const ordenesProduccionRouter = Router();
 
 ordenesProduccionRouter.get("/", async (req, res, next) => {
   try {
-    const { etapaId, prioridadId, mias } = req.query;
-    // Sin ver_todas_las_ordenes (OPERADOR), la visibilidad queda SIEMPRE
-    // forzada a lo propio — no es una opción que el cliente pueda pedir o no.
-    const soloPropias = !tienePermiso(req, "ver_todas_las_ordenes");
+    const { etapaId, prioridadId, mias, busqueda } = req.query;
+    const veTodas = tienePermiso(req, "ver_todas_las_ordenes");
+    // Vendedora ve las órdenes de SUS pedidos (creadoPorId), no las que
+    // tiene asignadas como responsable — nunca elige, es forzado igual que
+    // el alcance de OPERADOR.
+    const esVendedora = !veTodas && tienePermiso(req, "ver_estado_produccion_de_sus_pedidos");
     const ordenes = await ordenesService.listarOrdenesProduccion(req.usuario.empresaId, {
       etapaId,
       prioridadId,
-      responsableUsuarioId: soloPropias ? req.usuario.id : mias === "true" ? req.usuario.id : undefined,
+      busqueda,
+      pedidoCreadoPorId: esVendedora ? req.usuario.id : undefined,
+      // Sin ver_todas_las_ordenes ni ver_estado_produccion_de_sus_pedidos
+      // (OPERADOR), la visibilidad queda SIEMPRE forzada a lo propio.
+      responsableUsuarioId:
+        !veTodas && !esVendedora ? req.usuario.id : veTodas && mias === "true" ? req.usuario.id : undefined,
     });
     res.json(ordenes);
   } catch (err) {

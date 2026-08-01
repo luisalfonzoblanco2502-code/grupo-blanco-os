@@ -5,7 +5,18 @@
       "Read(//c/Users/PANAPRICE/.claude/plugins/**)",
       "Read(//c/Users/PANAPRICE/.claude/**)",
       "Bash(mkdir -p \"/c/Users/PANAPRICE/Documents/CLAUDE/.claude/skills\")",
-      "Bash(cp -r \"/c/Users/PANAPRICE/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator\" \"/c/Users/PANAPRICE/Documents/CLAUDE/.claude/skills/skill-creator\")"
+      "Bash(cp -r \"/c/Users/PANAPRICE/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator\" \"/c/Users/PANAPRICE/Documents/CLAUDE/.claude/skills/skill-creator\")",
+      "Bash(node --check src/api.js)",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(curl -s -o /dev/null -w \"catalogo: %{http_code}\\\\n\" http://localhost:5174)",
+      "Bash(node test-correctivo.cjs)",
+      "Bash(node -e ' *)",
+      "Bash(rm -f test-correctivo.cjs)",
+      "Bash(npm uninstall *)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(grep -n \"NavegacionPrincipal\\\\|<Hero \\\\/>\\\\|<PorQuePanaprice\" \"c:\\\\Users\\\\PANAPRICE\\\\Documents\\\\CLAUDE\\\\catalogo\\\\src\\\\App.jsx\")",
+      "Bash(node test-ajustes.cjs)"
     ]
   }
 }
