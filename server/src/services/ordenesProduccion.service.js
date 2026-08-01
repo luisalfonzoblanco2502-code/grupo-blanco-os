@@ -586,3 +586,194 @@ export async function reasignarResponsableOrden(
     return ordenActualizada;
   }, TRANSACTION_OPTIONS);
 }
+
+// Kanban de Producción POR PEDIDO (2026-08-01) — refactor crítico: mostrar
+// cada OrdenProduccion individual no escala (un pedido de 2000 items
+// facturado con distintos productos/tela genera N OPs vía "OP agrupada por
+// lote" — con 10 clientes de 200 items cada uno, eso son cientos de
+// tarjetas). Acá se agrupan TODAS las OPs activas de un mismo pedido en UNA
+// sola tarjeta.
+//
+// Decisión explícita del usuario (no negociable sin volver a diseñar):
+// "Avanzar" en la tarjeta mueve TODAS las OPs del pedido juntas, con el
+// MISMO responsable — se pierde a propósito la posibilidad de asignar
+// productos distintos del mismo pedido a responsables distintos. Si las OPs
+// de un pedido llegaran a divergir (no debería pasar si todo avanza siempre
+// por acá), la tarjeta se ubica en la etapa MÁS ATRASADA (el cuello de
+// botella real) y avanzarPedido() rechaza el avance hasta reconciliarlas
+// manualmente desde el detalle de cada orden (endpoints /:id/etapa y
+// /:id/responsable existentes, sin tocar).
+export async function listarPedidosKanban(empresaId, usuario) {
+  const permisos = usuario.rol?.permisos;
+  const veTodas = !!permisos?.ver_todas_las_ordenes;
+  const esVendedora = !veTodas && !!permisos?.ver_estado_produccion_de_sus_pedidos;
+
+  const ordenes = await prisma.ordenProduccion.findMany({
+    where: {
+      empresaId,
+      eliminadoEn: null,
+      ...(esVendedora ? { pedido: { creadoPorId: usuario.id } } : {}),
+      ...(!veTodas && !esVendedora ? { responsableUsuarioId: usuario.id } : {}),
+    },
+    include: {
+      pedido: { select: { id: true, pedId: true, clienteNombre: true, fechaCompromiso: true } },
+      etapa: true,
+      prioridad: true,
+      responsableUsuario: { select: { id: true, nombre: true, puesto: { select: { nombre: true } } } },
+    },
+  });
+
+  const porPedido = new Map();
+  for (const op of ordenes) {
+    const key = op.pedido.id;
+    if (!porPedido.has(key)) porPedido.set(key, []);
+    porPedido.get(key).push(op);
+  }
+
+  const pedidoIds = [...porPedido.keys()];
+  const lineasPorPedido = pedidoIds.length
+    ? await prisma.pedidoLinea.groupBy({ by: ["pedidoId"], where: { pedidoId: { in: pedidoIds } }, _count: { id: true } })
+    : [];
+  const conteoLineas = new Map(lineasPorPedido.map((l) => [l.pedidoId, l._count.id]));
+
+  const pedidos = [...porPedido.entries()].map(([pedidoId, ops]) => {
+    // Etapa del pedido = la más atrasada entre sus OPs (ver nota de arriba).
+    const opReferencia = ops.reduce((min, o) => (o.etapa.orden < min.etapa.orden ? o : min), ops[0]);
+    const responsable = opReferencia.responsableUsuario?.nombre ?? opReferencia.responsableExterno ?? null;
+    const rolResponsable =
+      opReferencia.responsableUsuario?.puesto?.nombre ?? (opReferencia.responsableExterno ? "Externo" : null);
+
+    return {
+      pedidoId,
+      pedId: opReferencia.pedido.pedId,
+      clienteNombre: opReferencia.pedido.clienteNombre,
+      itemsCount: conteoLineas.get(pedidoId) ?? ops.length,
+      prioridad: opReferencia.prioridad?.nombre ?? null,
+      responsable,
+      rolResponsable,
+      fechaCompromiso: opReferencia.pedido.fechaCompromiso,
+      situacion: calcularSituacionEntrega({ fechaEntregaReal: null, fechaCompromiso: opReferencia.pedido.fechaCompromiso }),
+      etapaId: opReferencia.etapa.id,
+      etapaNombre: opReferencia.etapa.nombre,
+      etapaOrden: opReferencia.etapa.orden,
+      opIds: ops.map((o) => o.id),
+      // Señal para la UI/soporte: si esto es true, avanzarPedido() va a
+      // rechazar el avance hasta reconciliar manualmente.
+      divergente: ops.some((o) => o.etapaId !== opReferencia.etapaId),
+    };
+  });
+
+  const etapas = await prisma.etapa.findMany({ orderBy: { orden: "asc" } });
+  return { etapas, pedidos };
+}
+
+// "Avanzar" a nivel de pedido: mueve TODAS sus OPs activas a la etapa
+// siguiente con el mismo responsable, en una sola transacción — o ninguna
+// (si una sola OP no puede moverse, no se mueve ninguna).
+export async function avanzarPedido(pedidoId, empresaId, usuario, { etapaId, responsableUsuarioId, responsableExterno }) {
+  const interno = !!responsableUsuarioId;
+  const externo = !!responsableExterno;
+  if (interno === externo) {
+    throw new ValidacionError(
+      "Debes indicar exactamente un responsable: interno (usuario) o externo (texto), no ambos ni ninguno"
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const ops = await tx.ordenProduccion.findMany({
+      where: { pedidoId, empresaId, eliminadoEn: null },
+      include: { etapa: true, pedido: { select: { creadoPorId: true } }, responsableUsuario: { select: { nombre: true } } },
+    });
+    if (ops.length === 0) throw new NoEncontradoError("Este pedido no tiene órdenes de producción");
+
+    const etapasActuales = new Set(ops.map((o) => o.etapaId));
+    if (etapasActuales.size > 1) {
+      throw new ValidacionError(
+        "Las órdenes de este pedido están en etapas distintas — reconcíliarlas desde el detalle de cada orden antes de avanzar el pedido completo"
+      );
+    }
+    for (const op of ops) verificarAccesoOrden(op, usuario);
+
+    const etapaActual = ops[0].etapa;
+    const nuevaEtapa = await tx.etapa.findUnique({ where: { id: Number(etapaId) } });
+    if (!nuevaEtapa) throw new ValidacionError("La etapa indicada no existe");
+    verificarEtapaPermitida(usuario, nuevaEtapa);
+
+    if (nuevaEtapa.orden !== etapaActual.orden + 1) {
+      throw new ValidacionError(
+        `No se puede pasar de "${etapaActual.nombre}" a "${nuevaEtapa.nombre}". Solo se puede avanzar a la siguiente etapa del pipeline, en orden.`
+      );
+    }
+
+    const etapaMaxima = await tx.etapa.aggregate({ _max: { orden: true } });
+    const esEtapaFinal = nuevaEtapa.orden === etapaMaxima._max.orden;
+    const opIds = ops.map((o) => o.id);
+    const ahora = new Date();
+
+    // Un pedido con N OPs no debe costar N round-trips a la base — con la
+    // latencia real del pooler medida esta sesión (~2-3s por consulta),
+    // hacer esto en un loop de updates/creates individuales ya excedía el
+    // timeout de la transacción con solo 2 OPs (encontrado certificando
+    // este mismo refactor). updateMany/createMany hacen el trabajo de
+    // escritura en, como máximo, 3 consultas — sin importar cuántas OPs
+    // tenga el pedido.
+    await tx.ordenProduccion.updateMany({
+      where: { id: { in: opIds } },
+      data: {
+        etapaId: nuevaEtapa.id,
+        responsableUsuarioId: responsableUsuarioId || null,
+        responsableExterno: responsableExterno || null,
+        actualizadoEn: ahora,
+        ...(esEtapaFinal ? { fechaEntregaReal: ahora } : {}),
+      },
+    });
+
+    const responsableNuevo = responsableUsuarioId
+      ? (await tx.usuario.findUnique({ where: { id: responsableUsuarioId }, select: { nombre: true } }))?.nombre
+      : responsableExterno;
+
+    const filasBitacora = ops.flatMap((op) => {
+      const responsableAnterior = op.responsableUsuario?.nombre ?? op.responsableExterno ?? "—";
+      const filas = [
+        {
+          ordenProduccionId: op.id,
+          empresaId,
+          tipoEvento: "cambio_etapa",
+          campoAfectado: "Etapa Actual",
+          valorAnterior: etapaActual.nombre,
+          valorNuevo: nuevaEtapa.nombre,
+          usuarioId: usuario.id,
+        },
+      ];
+      if ((responsableNuevo ?? "—") !== responsableAnterior) {
+        filas.push({
+          ordenProduccionId: op.id,
+          empresaId,
+          tipoEvento: "cambio_responsable",
+          campoAfectado: "Responsable",
+          valorAnterior: responsableAnterior,
+          valorNuevo: responsableNuevo ?? "—",
+          usuarioId: usuario.id,
+        });
+      }
+      return filas;
+    });
+    await tx.bitacoraEvento.createMany({ data: filasBitacora });
+
+    const actualizadas = await tx.ordenProduccion.findMany({ where: { id: { in: opIds } }, include: INCLUDE_LISTA });
+    for (const opActualizada of actualizadas) {
+      await emit(ORDEN_ETAPA_CAMBIADA, { tx, orden: opActualizada, empresaId, usuarioId: usuario.id });
+      if (esEtapaFinal) {
+        await emit(ORDEN_CERRADA, { tx, orden: opActualizada, empresaId, usuarioId: usuario.id });
+      }
+    }
+
+    return actualizadas;
+  // Timeout más generoso que TRANSACTION_OPTIONS: a diferencia de cualquier
+  // otra transacción del sistema, el trabajo acá escala con la cantidad de
+  // OPs del pedido (el emit() por OP puede disparar listeners con su
+  // propia consulta, ej. avanzarEstadoPedidoSegunEtapa) — las escrituras en
+  // sí ya están agrupadas en updateMany/createMany, esto es margen extra
+  // para pedidos con muchas OPs bajo latencia alta.
+  }, { timeout: 60000, maxWait: 15000 });
+}

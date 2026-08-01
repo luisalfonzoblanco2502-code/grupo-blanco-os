@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as pedidosService from "../services/pedidos.service.js";
 import { facturarPedido } from "../services/facturacion.service.js";
 import * as pedidoLineasService from "../services/pedidoLineas.service.js";
+import { listarPedidosKanban, avanzarPedido } from "../services/ordenesProduccion.service.js";
 import { requirePermiso, tienePermiso } from "../middleware/permisos.js";
 
 export const pedidosRouter = Router();
@@ -9,6 +10,20 @@ export const pedidosRouter = Router();
 pedidosRouter.get("/", requirePermiso("ver_pedidos"), async (req, res, next) => {
   try {
     res.json(await pedidosService.listarPedidos(req.usuario.empresaId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Kanban de Producción POR PEDIDO — DEBE ir antes de "/:id" (mismo motivo
+// que "sugerencias-tecnicas" abajo: Express matchea por orden de registro).
+// Sin requirePermiso acá a propósito: la visibilidad ya la resuelve
+// listarPedidosKanban internamente (mismo criterio de alcance que
+// GET /api/ordenes-produccion — vendedora ve lo suyo, operador ve lo
+// asignado, ver_todas_las_ordenes ve todo).
+pedidosRouter.get("/kanban", async (req, res, next) => {
+  try {
+    res.json(await listarPedidosKanban(req.usuario.empresaId, req.usuario));
   } catch (err) {
     next(err);
   }
@@ -180,6 +195,23 @@ pedidosRouter.delete("/lineas/:lineaId", requirePermiso("editar_pedido"), async 
   try {
     await pedidoLineasService.eliminarLinea(req.params.lineaId, req.usuario.empresaId);
     res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Kanban por pedido: avanza TODAS las OPs activas del pedido juntas, con
+// el mismo responsable (decisión explícita — ver nota en
+// ordenesProduccion.service.js/avanzarPedido). Mismo permiso que el avance
+// de una OP individual.
+pedidosRouter.patch("/:id/avanzar", requirePermiso("cambiar_etapa"), async (req, res, next) => {
+  try {
+    const ordenes = await avanzarPedido(req.params.id, req.usuario.empresaId, req.usuario, {
+      etapaId: req.body.etapaId,
+      responsableUsuarioId: req.body.responsableUsuarioId,
+      responsableExterno: req.body.responsableExterno,
+    });
+    res.json({ ordenes });
   } catch (err) {
     next(err);
   }
