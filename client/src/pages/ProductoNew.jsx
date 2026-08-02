@@ -21,6 +21,18 @@ export function ProductoNew() {
   const [escalones, setEscalones] = useState([{ ...ESCALON_VACIO }]);
   const [productoInternoId, setProductoInternoId] = useState("");
   const [productosInternos, setProductosInternos] = useState([]);
+  // Ficha de Producción (Producto Maestro) — separada a propósito de los
+  // campos de catálogo público de arriba: esto es lo que usa Producción/
+  // Diseño, nunca se muestra al cliente.
+  const [requierePersonalizacion, setRequierePersonalizacion] = useState(false);
+  const [imagenReferenciaProduccionUrl, setImagenReferenciaProduccionUrl] = useState("");
+  const [tela, setTela] = useState("");
+  const [medidas, setMedidas] = useState("");
+  const [tipoImpresion, setTipoImpresion] = useState("");
+  const [forro, setForro] = useState("");
+  const [tiras, setTiras] = useState("");
+  const [tiempoProduccionMinutos, setTiempoProduccionMinutos] = useState("");
+  const [instruccionesProduccion, setInstruccionesProduccion] = useState("");
   const [error, setError] = useState(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -55,6 +67,15 @@ export function ProductoNew() {
         disponible,
         preciosVolumen,
         productoInternoId: productoInternoId || undefined,
+        requierePersonalizacion,
+        imagenReferenciaProduccionUrl: imagenReferenciaProduccionUrl || undefined,
+        tela: tela || undefined,
+        medidas: medidas || undefined,
+        tipoImpresion: tipoImpresion || undefined,
+        forro: forro || undefined,
+        tiras: tiras || undefined,
+        tiempoProduccionMinutos: tiempoProduccionMinutos ? Number(tiempoProduccionMinutos) : undefined,
+        instruccionesProduccion: instruccionesProduccion || undefined,
       });
       navigate(`/productos`, { state: { creado: producto.id } });
     } catch (err) {
@@ -132,6 +153,82 @@ export function ProductoNew() {
           Solo necesario si este producto debe reservar/consumir inventario real al facturarse. Sin vincular, se
           vende exactamente igual que hoy.
         </p>
+
+        <fieldset className="ficha-produccion">
+          <legend>Ficha de Producción (Producto Maestro)</legend>
+          <p className="card-label" style={{ marginTop: "-0.5rem" }}>
+            Esto lo usan Diseño/Producción — nunca se muestra al cliente en el catálogo.
+          </p>
+          <label>
+            <input
+              type="checkbox"
+              checked={requierePersonalizacion}
+              onChange={(e) => setRequierePersonalizacion(e.target.checked)}
+            />{" "}
+            Es personalizable (el cliente adjunta su propio diseño al pedir)
+          </label>
+          <label>
+            Imagen de referencia de producción
+            <ImagenProductoUpload
+              empresaId={perfil.empresa.id}
+              imagenUrl={imagenReferenciaProduccionUrl}
+              onChange={setImagenReferenciaProduccionUrl}
+            />
+          </label>
+          <label>
+            Tela / material
+            <input type="text" value={tela} onChange={(e) => setTela(e.target.value)} />
+          </label>
+          <label>
+            Medidas
+            <input
+              type="text"
+              placeholder="ej: 50cm × 30cm"
+              value={medidas}
+              onChange={(e) => setMedidas(e.target.value)}
+            />
+          </label>
+          <label>
+            Tipo de impresión
+            <input
+              type="text"
+              placeholder="ej: Sublimación, Serigrafía"
+              value={tipoImpresion}
+              onChange={(e) => setTipoImpresion(e.target.value)}
+            />
+          </label>
+          <label>
+            Forro
+            <input
+              type="text"
+              placeholder="ej: Sí, Sin forro, Microfibra"
+              value={forro}
+              onChange={(e) => setForro(e.target.value)}
+            />
+          </label>
+          <label>
+            Tiras / detalles especiales
+            <input type="text" value={tiras} onChange={(e) => setTiras(e.target.value)} />
+          </label>
+          <label>
+            Tiempo de producción (minutos)
+            <input
+              type="number"
+              min={1}
+              placeholder="ej: 2880 (= 2 días)"
+              value={tiempoProduccionMinutos}
+              onChange={(e) => setTiempoProduccionMinutos(e.target.value)}
+            />
+          </label>
+          <label>
+            Instrucciones especiales
+            <textarea
+              rows={3}
+              value={instruccionesProduccion}
+              onChange={(e) => setInstruccionesProduccion(e.target.value)}
+            />
+          </label>
+        </fieldset>
 
         <fieldset>
           <legend>Precios por volumen (opcional)</legend>

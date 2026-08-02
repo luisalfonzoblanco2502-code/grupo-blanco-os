@@ -30,6 +30,7 @@ async function request(path, options = {}) {
 
 export const api = {
   getDashboard: () => request("/dashboard"),
+  getPanelGeneral: () => request("/dashboard/panel-general"),
 
   getPedidos: () => request("/pedidos"),
   getPedido: (id) => request(`/pedidos/${id}`),
@@ -37,6 +38,7 @@ export const api = {
   updatePedido: (id, data) =>
     request(`/pedidos/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   cancelarPedido: (id) => request(`/pedidos/${id}/cancelar`, { method: "PATCH" }),
+  eliminarPedidoDefinitivo: (id) => request(`/pedidos/${id}`, { method: "DELETE" }),
   facturarPedido: (id, data) =>
     request(`/pedidos/${id}/facturar`, { method: "POST", body: JSON.stringify(data) }),
   cambiarEstadoPedido: (id, estadoNuevo) =>
@@ -62,6 +64,8 @@ export const api = {
 
   buscarClientes: (q) => request(`/clientes${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   crearCliente: (data) => request("/clientes", { method: "POST", body: JSON.stringify(data) }),
+  verificarClienteDuplicado: (telefono, cedula) =>
+    request(`/clientes/verificar-duplicado?telefono=${encodeURIComponent(telefono || "")}&cedula=${encodeURIComponent(cedula || "")}`),
 
   getOrdenesProduccion: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
@@ -72,6 +76,11 @@ export const api = {
     request(`/ordenes-produccion/${id}/etapa`, { method: "PATCH", body: JSON.stringify({ etapaId }) }),
   reasignarResponsableOrden: (id, data) =>
     request(`/ordenes-produccion/${id}/responsable`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Kanban de Producción POR PEDIDO (refactor crítico) — una tarjeta por
+  // pedido, no por OP individual.
+  getPedidosKanban: () => request("/pedidos/kanban"),
+  avanzarPedido: (id, data) => request(`/pedidos/${id}/avanzar`, { method: "PATCH", body: JSON.stringify(data) }),
 
   getEtapas: () => request("/etapas"),
   getPrioridades: () => request("/prioridades"),

@@ -14,7 +14,15 @@ export function Sidebar({ colapsado }) {
     <aside className={`sidebar${colapsado ? " sidebar-colapsado" : ""}`}>
       <div className="sidebar-marca">
         <span className="sidebar-marca-icono">GB</span>
-        {!colapsado && <span className="sidebar-marca-texto">Grupo Blanco OS</span>}
+        {!colapsado && (
+          <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+            {/* Wordmark de texto (identidad Panaprice Custom) como marca
+                principal — placeholder hasta tener el logo real; reemplazar
+                acá cuando llegue el archivo (una línea de código). */}
+            <span className="sidebar-marca-panaprice">Panaprice Custom</span>
+            <span className="sidebar-marca-texto">Grupo Blanco OS</span>
+          </span>
+        )}
       </div>
       <nav className="sidebar-nav">
         {MODULOS.filter((m) => moduloVisible(permisos, m)).map((m) => (

@@ -9,10 +9,11 @@ import { PedidoNew } from "./pages/PedidoNew";
 import { PedidoEdit } from "./pages/PedidoEdit";
 import { ProduccionDashboard } from "./pages/produccion/ProduccionDashboard";
 import { OrdenesProduccionList } from "./pages/OrdenesProduccionList";
-import { OrdenesKanban } from "./pages/produccion/OrdenesKanban";
+import { PedidosKanban } from "./pages/produccion/PedidosKanban";
 import { OrdenProduccionDetail } from "./pages/OrdenProduccionDetail";
 import { OrdenProduccionImprimir } from "./pages/produccion/OrdenProduccionImprimir";
 import { PedidoImprimir } from "./pages/pedidos/PedidoImprimir";
+import { PedidoRecibo } from "./pages/pedidos/PedidoRecibo";
 import { CalidadDatos } from "./pages/pedidos/CalidadDatos";
 import { InventarioDashboard } from "./pages/inventario/InventarioDashboard";
 import { MateriaPrimaList } from "./pages/inventario/MateriaPrimaList";
@@ -55,12 +56,13 @@ export default function App() {
           <Route path=":id" element={pagina(<PedidoDetail />, "ver_pedidos")} />
           <Route path=":id/editar" element={pagina(<PedidoEdit />, "ver_pedidos")} />
           <Route path=":id/imprimir" element={pagina(<PedidoImprimir />, "imprimir_orden")} />
+          <Route path=":id/recibo" element={pagina(<PedidoRecibo />, "ver_pedidos")} />
         </Route>
 
         <Route path="produccion">
           <Route index element={pagina(<ProduccionDashboard />)} />
           <Route path="ordenes" element={pagina(<OrdenesProduccionList />)} />
-          <Route path="kanban" element={pagina(<OrdenesKanban />)} />
+          <Route path="kanban" element={pagina(<PedidosKanban />)} />
           <Route path="ordenes/:id" element={pagina(<OrdenProduccionDetail />)} />
           <Route path="ordenes/:id/imprimir" element={pagina(<OrdenProduccionImprimir />, "imprimir_orden")} />
           <Route

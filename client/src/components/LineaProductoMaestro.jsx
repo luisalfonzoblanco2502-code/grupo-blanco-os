@@ -2,13 +2,23 @@ import { useEffect, useRef } from "react";
 import { precioEsperado } from "../utils/precioProducto";
 import { DisenoPlaceholder } from "./DisenoPlaceholder";
 
+// Formato humano de tiempoProduccionMinutos (guardado en minutos en la
+// base) — solo para MOSTRAR "2 días"/"3 horas" en la tarjeta; nunca se
+// reescribe el valor guardado.
+function formatoTiempoProduccion(minutos) {
+  if (!minutos) return null;
+  if (minutos % 1440 === 0) return `${minutos / 1440} día${minutos / 1440 === 1 ? "" : "s"}`;
+  if (minutos % 60 === 0) return `${minutos / 60} hora${minutos / 60 === 1 ? "" : "s"}`;
+  return `${minutos} min`;
+}
+
 // Tarjeta compacta de una línea nacida de un Producto Maestro (Paso 5) —
 // SIEMPRE expandida (a diferencia de LineaCard/LineaForm): no hay campos
 // técnicos que mostrar u ocultar, solo lo comercial. Nunca envía/edita
 // talla/tela/medidas/tipoImpresion/forro/tiras/insumos/productoInternoId/
 // instrucciones/tiempos/molde — eso ya vive en el snapshot que arma el
 // backend al guardar (Paso 4); acá ni siquiera se leen esos campos.
-export function LineaProductoMaestro({ linea, autoFocus, onCambiar, onEliminar, onContinuar }) {
+export function LineaProductoMaestro({ linea, autoFocus, onCambiar, onEliminar, onContinuar, puedeEditarPrecio }) {
   const cantidadRef = useRef(null);
 
   useEffect(() => {
@@ -20,12 +30,26 @@ export function LineaProductoMaestro({ linea, autoFocus, onCambiar, onEliminar, 
   }, [autoFocus]);
 
   const cantidad = Number(linea.cantidad) || 0;
-  const precioUnitario = precioEsperado(linea, cantidad);
+  // Una vez que la vendedora tocó el precio a mano, dejar de recalcularlo
+  // solo porque cambió la cantidad — precioManual es la señal de esa
+  // decisión explícita (ver manejarPrecio/restablecerPrecio abajo).
+  const precioUnitario = linea.precioManual ? Number(linea.precioUnitario) : precioEsperado(linea, cantidad);
   const subtotal = precioUnitario * cantidad;
 
   function manejarCantidad(valor) {
     const cantidadNueva = Math.max(1, Number(valor) || 1);
-    onCambiar({ cantidad: cantidadNueva, precioUnitario: precioEsperado(linea, cantidadNueva) });
+    onCambiar({
+      cantidad: cantidadNueva,
+      precioUnitario: linea.precioManual ? linea.precioUnitario : precioEsperado(linea, cantidadNueva),
+    });
+  }
+
+  function manejarPrecio(valor) {
+    onCambiar({ precioUnitario: valor === "" ? "" : Number(valor), precioManual: true });
+  }
+
+  function restablecerPrecio() {
+    onCambiar({ precioUnitario: precioEsperado(linea, cantidad), precioManual: false });
   }
 
   function manejarEnterCantidad(e) {
@@ -45,7 +69,13 @@ export function LineaProductoMaestro({ linea, autoFocus, onCambiar, onEliminar, 
 
         <div className="linea-producto-maestro-info">
           <span className="linea-producto-maestro-nombre">{linea.producto}</span>
-          <span className="card-label">Ref. {linea.productoCodigo}</span>
+          <span className="card-label">
+            Ref. {linea.productoCodigo}
+            {linea.tela ? ` · ${linea.tela}` : ""}
+            {formatoTiempoProduccion(linea.tiempoProduccionMinutos)
+              ? ` · ${formatoTiempoProduccion(linea.tiempoProduccionMinutos)}`
+              : ""}
+          </span>
         </div>
 
         <label className="linea-producto-maestro-campo">
@@ -62,7 +92,31 @@ export function LineaProductoMaestro({ linea, autoFocus, onCambiar, onEliminar, 
 
         <div className="linea-producto-maestro-campo">
           <span className="card-label">Precio unit.</span>
-          <span>${precioUnitario.toFixed(2)}</span>
+          {puedeEditarPrecio ? (
+            <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={linea.precioManual ? linea.precioUnitario : precioUnitario}
+                onChange={(e) => manejarPrecio(e.target.value)}
+                style={{ width: "5rem" }}
+              />
+              {linea.precioManual && (
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm"
+                  onClick={restablecerPrecio}
+                  title="Volver al precio del catálogo"
+                  aria-label="Restablecer precio"
+                >
+                  ↺
+                </button>
+              )}
+            </span>
+          ) : (
+            <span>${precioUnitario.toFixed(2)}</span>
+          )}
         </div>
 
         <div className="linea-producto-maestro-campo">
@@ -75,7 +129,12 @@ export function LineaProductoMaestro({ linea, autoFocus, onCambiar, onEliminar, 
         </button>
       </div>
 
-      <DisenoPlaceholder requierePersonalizacion={linea.requierePersonalizacion} />
+      <DisenoPlaceholder
+        requierePersonalizacion={linea.requierePersonalizacion}
+        archivos={linea.archivos}
+        carpeta={linea._carpeta}
+        onCambiar={(archivos) => onCambiar({ archivos })}
+      />
 
       <input
         type="text"

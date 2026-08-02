@@ -72,9 +72,11 @@ export function ProductosList() {
         <thead>
           <tr>
             <th>Código</th>
+            <th>Foto</th>
             <th>Nombre</th>
-            <th>Categoría</th>
+            <th>Personalizable</th>
             <th>Precio base</th>
+            <th>Categoría</th>
             <th>Catálogo</th>
             <th>Disponibilidad</th>
             <th></th>
@@ -84,11 +86,25 @@ export function ProductosList() {
           {productos.map((p) => (
             <tr key={p.id}>
               <td>{p.codigo}</td>
+              <td>
+                {p.imagenReferenciaProduccionUrl ? (
+                  <img
+                    src={p.imagenReferenciaProduccionUrl}
+                    alt=""
+                    style={{ width: "2.5rem", height: "2.5rem", objectFit: "cover", borderRadius: "6px" }}
+                  />
+                ) : (
+                  <span aria-hidden="true" style={{ fontSize: "1.25rem" }}>
+                    📦
+                  </span>
+                )}
+              </td>
               <td>{p.nombre}</td>
+              <td style={{ textAlign: "center" }}>{p.requierePersonalizacion ? "✓" : "—"}</td>
+              <td>${Number(p.precioBase).toFixed(2)}</td>
               <td>
                 <Badge>{p.categoria}</Badge>
               </td>
-              <td>${Number(p.precioBase).toFixed(2)}</td>
               <td>{p.publicadoCatalogo ? "Publicado" : "Oculto"}</td>
               <td>{p.disponible ? "Disponible" : "Agotado"}</td>
               <td style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
@@ -107,7 +123,7 @@ export function ProductosList() {
           ))}
           {productos.length === 0 && (
             <tr>
-              <td colSpan={7}>No hay productos todavía.</td>
+              <td colSpan={9}>No hay productos todavía.</td>
             </tr>
           )}
         </tbody>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
-const CLIENTE_NUEVO_VACIO = { nombre: "", telefono: "", email: "", direccion: "" };
+const CLIENTE_NUEVO_VACIO = { nombre: "", cedula: "", telefono: "", email: "", direccion: "" };
 
 // "Buscar cliente existente" + "crear cliente sin abandonar el formulario",
 // en un solo campo. Sigue guardando clienteNombre como texto libre (nunca
@@ -18,11 +18,28 @@ export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
   const [nuevo, setNuevo] = useState({ ...CLIENTE_NUEVO_VACIO });
   const [creando, setCreando] = useState(false);
   const [error, setError] = useState(null);
+  const [duplicado, setDuplicado] = useState(null);
   const contenedorRef = useRef(null);
 
   useEffect(() => {
     setTexto(clienteNombre ?? "");
   }, [clienteNombre]);
+
+  // Nuevo Pedido rediseñado (Paso 2.2): teléfono/email/dirección visibles
+  // de entrada al escribir un nombre nuevo, sin exigir un clic extra en
+  // "+ Crear cliente nuevo" — la búsqueda de un cliente YA existente sigue
+  // funcionando igual (elegir() la colapsa).
+  useEffect(() => {
+    if (texto.trim() && !clienteId && permisos.crear_cliente) {
+      setNuevo((p) => ({ ...p, nombre: texto.trim() }));
+      setMostrarNuevo(true);
+    } else {
+      // Vacío, o ya vinculado a un Cliente existente (elegir()) — en
+      // ambos casos no corresponde seguir mostrando los campos de alta.
+      setMostrarNuevo(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [texto, clienteId]);
 
   useEffect(() => {
     if (!permisos.ver_clientes || !texto.trim()) {
@@ -35,6 +52,25 @@ export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [texto]);
+
+  // "Mostrar mensaje claro" (Paso 2 revisión): mientras se completa la
+  // ficha de cliente nuevo, si el teléfono o la cédula ya coinciden con un
+  // cliente existente, avisar ANTES de intentar guardar — en vez de un
+  // error genérico al chocar contra la validación del backend.
+  useEffect(() => {
+    if (!mostrarNuevo || (!nuevo.telefono.trim() && !nuevo.cedula.trim())) {
+      setDuplicado(null);
+      return;
+    }
+    const id = setTimeout(() => {
+      api
+        .verificarClienteDuplicado(nuevo.telefono, nuevo.cedula)
+        .then((r) => setDuplicado(r.cliente))
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nuevo.telefono, nuevo.cedula, mostrarNuevo]);
 
   useEffect(() => {
     function alHacerClicFuera(e) {
@@ -64,6 +100,14 @@ export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
   async function handleCrearCliente() {
     if (!nuevo.nombre.trim()) {
       setError("El nombre del cliente es obligatorio");
+      return;
+    }
+    if (!nuevo.cedula.trim()) {
+      setError("La cédula es obligatoria (la piden las empresas de envío)");
+      return;
+    }
+    if (duplicado) {
+      setError(`Ya existe "${duplicado.nombre}" con ese teléfono/cédula — elegilo de la búsqueda en vez de crear uno nuevo`);
       return;
     }
     setCreando(true);
@@ -96,7 +140,7 @@ export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
         </span>
       )}
 
-      {abierto && permisos.ver_clientes && (resultados.length > 0 || (texto.trim() && permisos.crear_cliente)) && (
+      {abierto && permisos.ver_clientes && resultados.length > 0 && (
         <div
           className="card"
           style={{
@@ -110,6 +154,9 @@ export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
             padding: "0.5rem",
           }}
         >
+          <p className="card-label" style={{ margin: "0 0 0.35rem" }}>
+            Clientes existentes que coinciden — elegí uno o seguí escribiendo para crear uno nuevo
+          </p>
           {resultados.map((c) => (
             <div
               key={c.id}
@@ -121,24 +168,14 @@ export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
               {c.telefono && <span style={{ color: "var(--text-muted)" }}> · {c.telefono}</span>}
             </div>
           ))}
-          {permisos.crear_cliente && (
-            <button
-              type="button"
-              onClick={() => {
-                setNuevo((p) => ({ ...p, nombre: texto.trim() }));
-                setMostrarNuevo(true);
-                setAbierto(false);
-              }}
-              style={{ width: "100%", marginTop: "0.25rem" }}
-            >
-              + Crear cliente nuevo{texto.trim() ? `: "${texto.trim()}"` : ""}
-            </button>
-          )}
         </div>
       )}
 
       {mostrarNuevo && (
         <div className="card" style={{ marginTop: "0.5rem" }}>
+          <p className="card-label" style={{ margin: "0 0 0.35rem" }}>
+            Cliente nuevo — completá y guardá su ficha (podés seguir con el resto del pedido después)
+          </p>
           <div className="form" style={{ gap: "0.5rem" }}>
             <div className="item-row">
               <input
@@ -150,25 +187,40 @@ export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
               />
               <input
                 type="text"
+                placeholder="Cédula (obligatoria)"
+                value={nuevo.cedula}
+                onChange={(e) => setNuevo((p) => ({ ...p, cedula: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="item-row">
+              <input
+                type="text"
                 placeholder="Teléfono"
                 value={nuevo.telefono}
                 onChange={(e) => setNuevo((p) => ({ ...p, telefono: e.target.value }))}
               />
-            </div>
-            <div className="item-row">
               <input
                 type="email"
                 placeholder="Correo (opcional)"
                 value={nuevo.email}
                 onChange={(e) => setNuevo((p) => ({ ...p, email: e.target.value }))}
               />
-              <input
-                type="text"
-                placeholder="Dirección (opcional)"
-                value={nuevo.direccion}
-                onChange={(e) => setNuevo((p) => ({ ...p, direccion: e.target.value }))}
-              />
             </div>
+            <input
+              type="text"
+              placeholder="Dirección (opcional)"
+              value={nuevo.direccion}
+              onChange={(e) => setNuevo((p) => ({ ...p, direccion: e.target.value }))}
+            />
+            {duplicado && (
+              <p style={{ color: "var(--warning, #b45309)" }}>
+                📞 Teléfono/cédula ya registrado: <strong>{duplicado.nombre}</strong> —{" "}
+                <button type="button" className="btn-ghost btn-sm" onClick={() => elegir(duplicado)}>
+                  usar este cliente
+                </button>
+              </p>
+            )}
             {error && <p style={{ color: "#f87171" }}>{error}</p>}
             <div className="item-row">
               <button type="button" className="btn-primary" onClick={handleCrearCliente} disabled={creando}>

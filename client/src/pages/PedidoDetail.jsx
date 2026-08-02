@@ -33,6 +33,8 @@ export function PedidoDetail() {
   const [error, setError] = useState(null);
   const [cancelando, setCancelando] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const [mostrarModalEliminar, setMostrarModalEliminar] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
 
   function recargar() {
     return api.getPedido(id).then(setPedido).catch((err) => setError(err.message));
@@ -53,6 +55,24 @@ export function PedidoDetail() {
     } catch (err) {
       setError(err.message);
       setCancelando(false);
+    }
+  }
+
+  async function handleEliminarDefinitivo() {
+    setEliminando(true);
+    setError(null);
+    try {
+      const resultado = await api.eliminarPedidoDefinitivo(id);
+      const n = resultado.ordenesEliminadas || 0;
+      mostrarToast(
+        n > 0
+          ? `Pedido ${pedido.pedId} eliminado (+${n} orden${n === 1 ? "" : "es"} de producción)`
+          : `Pedido ${pedido.pedId} eliminado`
+      );
+      navigate("/pedidos/lista");
+    } catch (err) {
+      setError(err.message);
+      setEliminando(false);
     }
   }
 
@@ -87,6 +107,12 @@ export function PedidoDetail() {
   const puedeFacturar = !!permisos.facturar_pedido;
   const puedeCambiarEstado = !!permisos.facturar_pedido;
   const puedeImprimir = !!permisos.imprimir_orden;
+  // "Eliminar pedido" — solo Administrador (permiso propio
+  // eliminar_pedido_definitivo, distinto de eliminar_pedido que también
+  // tiene Supervisor para "Cancelar" arriba). A diferencia de Cancelar,
+  // funciona en cualquier estado — por eso vive aparte, al pie de la
+  // página, no junto a las acciones de rutina.
+  const puedeEliminarDefinitivo = !!permisos.eliminar_pedido_definitivo;
 
   return (
     <div className="fade-in">
@@ -225,6 +251,55 @@ export function PedidoDetail() {
       )}
 
       <AlertaError>{error}</AlertaError>
+
+      {puedeEliminarDefinitivo && (
+        <div
+          className="panel"
+          style={{ marginTop: "2.5rem", borderColor: "var(--danger-soft)" }}
+        >
+          <div className="panel-titulo" style={{ color: "var(--danger)" }}>
+            Zona de riesgo
+          </div>
+          <p style={{ color: "var(--text-muted)", marginTop: 0 }}>
+            Elimina este pedido y TODAS sus Órdenes de Producción de todos los listados (Producción,
+            Kanban), sin importar su estado actual. Facturas y pagos que ya existan nunca se tocan — quedan
+            intactos como historial real.
+          </p>
+          <button
+            type="button"
+            onClick={() => setMostrarModalEliminar(true)}
+            style={{ backgroundColor: "#ef4444", color: "#ffffff", border: "none" }}
+          >
+            Eliminar pedido
+          </button>
+        </div>
+      )}
+
+      {mostrarModalEliminar && (
+        <div className="modal-fondo" onClick={() => !eliminando && setMostrarModalEliminar(false)}>
+          <div className="modal-contenido" onClick={(e) => e.stopPropagation()}>
+            <h2>¿Eliminar pedido {pedido.pedId}?</h2>
+            <p style={{ color: "var(--danger)" }}>Esta acción no se puede deshacer.</p>
+            <p style={{ color: "var(--text-muted)" }}>
+              {pedido.clienteNombre} · estado actual: {pedido.estado}
+            </p>
+            <div className="acciones">
+              <button type="button" onClick={() => setMostrarModalEliminar(false)} disabled={eliminando}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleEliminarDefinitivo}
+                disabled={eliminando}
+                style={{ backgroundColor: "#ef4444", color: "#ffffff", border: "none" }}
+              >
+                {eliminando && <Spinner />}
+                {eliminando ? "Eliminando..." : "Sí, eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

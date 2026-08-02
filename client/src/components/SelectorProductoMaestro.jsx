@@ -85,6 +85,11 @@ export const SelectorProductoMaestro = forwardRef(function SelectorProductoMaest
                 <span className="selector-producto-maestro-sinimagen" aria-hidden="true" />
               )}
               <span className="selector-producto-maestro-nombre">{p.nombre}</span>
+              {p.requierePersonalizacion && (
+                <span className="selector-producto-maestro-personalizable" title="Requiere foto del cliente">
+                  📌 PERSONALIZABLE
+                </span>
+              )}
               <span className="selector-producto-maestro-codigo">{p.codigo}</span>
             </li>
           ))}

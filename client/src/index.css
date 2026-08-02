@@ -1,65 +1,82 @@
 :root {
-  --text: #1a1d29;
-  --text-muted: #667085;
-  --text-faint: #79839a;
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-sunken: #f2f4f7;
-  --border: #e4e7ec;
-  --border-strong: #d0d5dd;
-  --accent: #2554c7;
-  --accent-hover: #1e46ab;
-  --accent-soft: #eaf0fe;
+  /* Glassmorphism global (2026-08-01) — antes solo vivía en Panel General
+     (variables --pg-*, ver más abajo), ahora es la identidad de TODO el
+     sistema. --surface/--border/etc. ya los usa cada módulo (Pedidos,
+     Productos, Producción, Kanban...) vía .card/.panel/.tabla/botones/
+     inputs/sidebar — cambiarlos acá una sola vez es lo que hace que el
+     efecto de vidrio se propague a todos lados sin tocar cada página. */
+  --text: #000000;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+  --bg: linear-gradient(135deg, #f0f9ff, #f3e8ff);
+  --surface: rgba(255, 255, 255, 0.7);
+  --surface-input: rgba(255, 255, 255, 0.5);
+  --surface-sunken: rgba(29, 78, 216, 0.05);
+  --border: rgba(255, 255, 255, 0.8);
+  --border-strong: rgba(255, 255, 255, 0.9);
+  --border-input: rgba(255, 255, 255, 0.6);
+  --accent: #1d4ed8;
+  --accent-hover: #1743b8;
+  --accent-soft: rgba(29, 78, 216, 0.1);
   --accent-text: #ffffff;
-  --success: #15803d;
-  --success-soft: #e7f6ec;
-  --warning: #b45309;
-  --warning-soft: #fef3e2;
-  --danger: #d92d20;
-  --danger-soft: #fdeceb;
+  --success: #10b981;
+  --success-soft: rgba(16, 185, 129, 0.12);
+  --warning: #f59e0b;
+  --warning-soft: rgba(245, 158, 11, 0.12);
+  --danger: #ef4444;
+  --danger-soft: rgba(239, 68, 68, 0.12);
   --info: #0284c7;
-  --info-soft: #e6f6fd;
+  --info-soft: rgba(2, 132, 199, 0.12);
 
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 14px;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
-  --shadow-lg: 0 4px 12px rgba(16, 24, 40, 0.1), 0 2px 4px rgba(16, 24, 40, 0.06);
+  --glass-blur: blur(20px);
+  --glass-blur-input: blur(15px);
+  --radius-sm: 12px;
+  --radius: 16px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.12);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
 
   font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #e7e9ee;
+    /* Variante oscura del glass — no especificada por el usuario (solo dio
+       valores de modo claro), extrapolada para que el toggle de tema
+       existente no quede roto: mismo vidrio, superficies oscuras
+       translúcidas en vez de blancas, texto claro. */
+    --text: #f1f2f4;
     --text-muted: #9aa3b7;
-    --text-faint: #828a9a;
-    --bg: #101218;
-    --surface: #181b23;
-    --surface-sunken: #1f232d;
-    --border: #2a2e3a;
-    --border-strong: #383e4d;
+    --text-faint: #7a8296;
+    --bg: linear-gradient(135deg, #0f1420, #1a1330);
+    --surface: rgba(30, 33, 43, 0.65);
+    --surface-input: rgba(30, 33, 43, 0.5);
+    --surface-sunken: rgba(109, 151, 255, 0.08);
+    --border: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.2);
+    --border-input: rgba(255, 255, 255, 0.14);
     --accent: #6d97ff;
     --accent-hover: #86a9ff;
-    --accent-soft: #1b2740;
+    --accent-soft: rgba(109, 151, 255, 0.16);
     --accent-text: #0b0f1a;
     --success: #4ade80;
-    --success-soft: #123321;
+    --success-soft: rgba(74, 222, 128, 0.14);
     --warning: #fbbf59;
-    --warning-soft: #3a2a0d;
+    --warning-soft: rgba(251, 191, 89, 0.14);
     --danger: #f87171;
-    --danger-soft: #3a1414;
+    --danger-soft: rgba(248, 113, 113, 0.14);
     --info: #67d1fb;
-    --info-soft: #123143;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+    --info-soft: rgba(103, 209, 251, 0.14);
+    --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.3);
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -155,6 +172,8 @@ a {
   width: 15.5rem;
   flex-shrink: 0;
   background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -188,6 +207,21 @@ a {
   font-size: 0.7rem;
   font-weight: 800;
   flex-shrink: 0;
+}
+
+/* Wordmark de texto — identidad Panaprice Custom como marca principal del
+   sidebar (placeholder hasta tener el logo real, ver nota en Sidebar.jsx). */
+.sidebar-marca-panaprice {
+  font-size: 1rem;
+  font-weight: 750;
+  color: #1D4ED8;
+  letter-spacing: -0.01em;
+}
+
+.sidebar-marca-texto {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .sidebar-nav {
@@ -289,6 +323,8 @@ a {
   padding: 0.65rem 1.25rem;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 
 .topbar-toggle {
@@ -392,7 +428,9 @@ kbd {
   text-align: left;
   padding: 0.65rem 0.85rem;
   border-bottom: 1px solid var(--border);
-  background: var(--surface-sunken);
+  background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   color: var(--text-muted);
   font-size: 0.72rem;
   font-weight: 700;
@@ -488,6 +526,64 @@ kbd {
   padding: 1rem 1.1rem;
 }
 
+/* Ficha de Producción (Producto Maestro): separada visualmente de los
+   campos de catálogo público — mismo acento sobrio que ya usa el resto
+   de la app, sin inventar un color nuevo. */
+.form fieldset.ficha-produccion {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Nuevo Pedido rediseñado (Paso 2.2): tabs en vez de una sola pantalla
+   larga. Espaciado generoso, colores sobrios, se apila bien en celular
+   (overflow-x scroll en vez de romper el layout). */
+.tabs-barra {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.25rem;
+  overflow-x: auto;
+}
+
+.tabs-boton {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 0;
+}
+
+.tabs-boton:hover {
+  color: var(--text);
+}
+
+.tabs-boton.activo {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tabs-boton-contador {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.05rem 0.45rem;
+}
+
+@media (max-width: 640px) {
+  .tabs-boton {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.9rem;
+  }
+}
+
 .form label {
   display: block;
   margin-bottom: 0.5rem;
@@ -521,18 +617,21 @@ select,
 textarea {
   font: inherit;
   font-size: 0.9rem;
-  padding: 0.5rem 0.7rem;
+  padding: 0.6rem 0.75rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
+  border: 1px solid var(--border-input);
+  background: var(--surface-input);
+  backdrop-filter: var(--glass-blur-input);
+  -webkit-backdrop-filter: var(--glass-blur-input);
   color: var(--text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
   transition: border-color 0.12s var(--ease), box-shadow 0.12s var(--ease);
 }
 
 input:hover,
 select:hover,
 textarea:hover {
-  border-color: var(--text-faint);
+  border-color: var(--border-strong);
 }
 
 input:focus-visible,
@@ -559,13 +658,13 @@ button {
   font: inherit;
   font-size: 0.88rem;
   font-weight: 600;
-  padding: 0.5rem 0.95rem;
+  padding: 0.6rem 1rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
-  background: var(--surface);
+  background: var(--surface-input);
   color: var(--text);
   cursor: pointer;
-  transition: background 0.12s var(--ease), border-color 0.12s var(--ease), transform 0.06s var(--ease), opacity 0.12s var(--ease);
+  transition: background 0.12s var(--ease), border-color 0.12s var(--ease), transform 0.06s var(--ease), opacity 0.12s var(--ease), box-shadow 0.12s var(--ease);
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -573,8 +672,8 @@ button {
 }
 
 button:hover {
-  background: var(--surface-sunken);
-  border-color: var(--text-faint);
+  box-shadow: var(--shadow-sm);
+  border-color: var(--border-strong);
 }
 
 button:active {
@@ -604,9 +703,9 @@ a.btn-primary:hover {
 
 .btn-secundario,
 a.btn-secundario {
-  background: var(--surface);
+  background: var(--surface-input);
   color: var(--text);
-  border-color: var(--border-strong);
+  border-color: var(--border);
   text-decoration: none;
   display: inline-flex;
 }
@@ -690,7 +789,9 @@ a.btn-ghost:hover {
   font-size: 0.78rem;
   font-weight: 650;
   white-space: nowrap;
-  border: 1px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 /* ---------- Cards / KPIs ---------- */
@@ -698,15 +799,17 @@ a.btn-ghost:hover {
 .card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1rem 1.25rem;
+  padding: 1.25rem 1.4rem;
   background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   min-width: 10rem;
   box-shadow: var(--shadow-sm);
   transition: box-shadow 0.15s var(--ease), transform 0.15s var(--ease), border-color 0.15s var(--ease);
 }
 
 a.card:hover {
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lg);
   border-color: var(--border-strong);
   transform: translateY(-1px);
 }
@@ -740,8 +843,11 @@ a.card:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  padding: 1.1rem 1.25rem;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  padding: 1.25rem 1.4rem;
   box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s var(--ease);
 }
 
 .panel-titulo {
@@ -1011,6 +1117,21 @@ a.card:hover {
   background: var(--surface-sunken);
 }
 
+.diseno-personalizado {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.diseno-personalizado-preview {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
 /* Buscador de Producto Maestro — dropdown filtrado en vivo, nunca un modal. */
 .agregar-producto-barra {
   display: flex;
@@ -1085,6 +1206,17 @@ a.card:hover {
   color: var(--text-faint);
   font-size: 0.75rem;
   flex-shrink: 0;
+}
+
+.selector-producto-maestro-personalizable {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  white-space: nowrap;
 }
 
 .selector-producto-maestro-vacio {
@@ -1280,7 +1412,9 @@ a.card:hover {
 }
 
 .kanban-columna {
-  background: var(--surface-sunken);
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: var(--radius-lg);
   min-width: 16.5rem;
   max-width: 16.5rem;
@@ -1324,16 +1458,18 @@ a.card:hover {
 
 .kanban-tarjeta {
   background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.7rem 0.8rem;
+  padding: 0.85rem 0.95rem;
   box-shadow: var(--shadow-sm);
   cursor: grab;
   transition: box-shadow 0.12s var(--ease), transform 0.12s var(--ease), opacity 0.12s var(--ease);
 }
 
 .kanban-tarjeta:hover {
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lg);
   transform: translateY(-1px);
 }
 
@@ -1358,6 +1494,167 @@ a.card:hover {
   align-items: center;
   justify-content: space-between;
   gap: 0.4rem;
+}
+
+/* ---------- Panel General (Home ejecutivo) — Glassmorphism ---------- */
+/* El glass de acá ya no es "distinto" del resto del ERP — desde el rebrand
+   global (arriba en :root) toda la app usa la misma paleta. Estas
+   variables --pg-* quedan como estaban (mismos valores, ahora coinciden
+   con los globales) para no arriesgar una regresión tocando algo que ya
+   funciona; son redundantes pero inofensivas. */
+
+.panel-general {
+  --pg-accent: #1d4ed8;
+  --pg-accent-claro: #60a5fa;
+  --pg-exito: #10b981;
+  --pg-alerta: #f59e0b;
+  --pg-texto: #0f1115;
+  --pg-texto-secundario: #64748b;
+  --pg-vidrio: rgba(255, 255, 255, 0.7);
+  --pg-vidrio-borde: rgba(255, 255, 255, 0.8);
+  background: linear-gradient(135deg, #f0f9ff, #f3e8ff);
+  color: var(--pg-texto);
+  border-radius: 16px;
+  padding: 1.25rem;
+}
+
+.panel-general-kpi {
+  border: 1px solid var(--pg-vidrio-borde);
+  border-radius: 16px;
+  padding: 24px;
+  background: var(--pg-vidrio);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+.panel-general-kpi.destacada {
+  border-width: 2px;
+  border-color: var(--pg-accent);
+}
+
+.panel-general-kpi-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--pg-texto);
+}
+
+.panel-general-kpi-valor {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-top: 0.3rem;
+  color: var(--pg-accent);
+}
+
+.panel-general-kpi-valor.exito {
+  color: var(--pg-exito);
+}
+
+.panel-general-kpi-sub {
+  font-size: 13px;
+  margin-top: 0.3rem;
+  color: var(--pg-texto-secundario);
+}
+
+.panel-general-compacta {
+  border: 1px solid var(--pg-vidrio-borde);
+  border-radius: 16px;
+  padding: 24px;
+  background: var(--pg-vidrio);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+.panel-general-compacta .card-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--pg-texto-secundario);
+}
+
+.panel-general-compacta-valor {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--pg-texto);
+}
+
+.panel-general-barra-progreso {
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  height: 0.5rem;
+  overflow: hidden;
+  margin-top: 0.6rem;
+}
+
+.panel-general-tabla th {
+  cursor: pointer;
+  user-select: none;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--pg-texto);
+  font-size: 13px;
+}
+
+.panel-general-tabla td,
+.panel-general-tabla th {
+  border-bottom: 1px solid var(--pg-vidrio-borde);
+}
+
+.panel-general-tendencia {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  height: 120px;
+  min-height: 120px;
+}
+
+.panel-general-tendencia-barra-visual {
+  background: linear-gradient(180deg, #1d4ed8, #60a5fa);
+  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.3);
+}
+
+.panel-general-tendencia-barra {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+/* ---------- Modal genérico (Kanban por pedido: modal "Avanzar") ---------- */
+
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 20, 30, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 210;
+  animation: fadeIn 0.12s var(--ease);
+}
+
+.modal-contenido {
+  background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 26rem;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 /* ---------- Command palette ---------- */
