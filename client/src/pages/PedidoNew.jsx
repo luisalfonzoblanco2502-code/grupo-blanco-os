@@ -27,7 +27,12 @@ function lineaDesdeProducto(producto) {
     productoId: producto.id,
     producto: producto.nombre,
     productoCodigo: producto.codigo,
+    // Catálogo regular usa imagenUrl; personalizados usan
+    // imagenReferenciaProduccionUrl — mismo fallback que ya aplica el
+    // buscador (SelectorProductoMaestro), para que la miniatura no
+    // dependa de cuál de las dos columnas se pobló.
     imagenReferenciaProduccionUrl: producto.imagenReferenciaProduccionUrl,
+    imagenUrl: producto.imagenUrl,
     requierePersonalizacion: producto.requierePersonalizacion,
     // Solo para MOSTRAR en la tarjeta ("el item ya trae todo") — nunca
     // viajan al backend, que arma su propio snapshot desde el Producto
@@ -398,9 +403,9 @@ export function PedidoNew() {
                   <tr key={i}>
                     <td>{l.producto}</td>
                     <td>
-                      {l.imagenReferenciaProduccionUrl ? (
+                      {l.imagenReferenciaProduccionUrl || l.imagenUrl ? (
                         <img
-                          src={l.imagenReferenciaProduccionUrl}
+                          src={l.imagenReferenciaProduccionUrl || l.imagenUrl}
                           alt=""
                           style={{ width: "2.2rem", height: "2.2rem", objectFit: "cover", borderRadius: "6px" }}
                         />
@@ -510,6 +515,7 @@ export function PedidoNew() {
                 <SelectorCliente
                   clienteNombre={clienteNombre}
                   clienteId={clienteId}
+                  cedulaObligatoria={tipoEntrega === "ENCOMIENDA"}
                   onChange={(v) => {
                     setClienteNombre(v.clienteNombre);
                     setClienteId(v.clienteId);

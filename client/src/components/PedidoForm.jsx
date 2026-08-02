@@ -40,6 +40,7 @@ export function PedidoForm({ valoresIniciales, onSubmit, enviando, error, textoB
         <SelectorCliente
           clienteNombre={valores.clienteNombre}
           clienteId={valores.clienteId}
+          cedulaObligatoria={valores.tipoEntrega === "ENCOMIENDA"}
           onChange={({ clienteNombre, clienteId }) => setValores((prev) => ({ ...prev, clienteNombre, clienteId }))}
         />
       </label>

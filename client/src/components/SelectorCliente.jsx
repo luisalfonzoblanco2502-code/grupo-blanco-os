@@ -8,7 +8,10 @@ const CLIENTE_NUEVO_VACIO = { nombre: "", cedula: "", telefono: "", email: "", d
 // en un solo campo. Sigue guardando clienteNombre como texto libre (nunca
 // deja de funcionar aunque no se elija/cree una ficha) y opcionalmente
 // clienteId cuando corresponde a un Cliente real ya existente.
-export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
+// cedulaObligatoria: "primero sugerir, nunca obligar" salvo la única
+// excepción real del negocio — las empresas de encomienda SÍ la piden para
+// despachar. Fuera de ese caso (Retiro/Delivery/sin definir) es opcional.
+export function SelectorCliente({ clienteNombre, clienteId, cedulaObligatoria, onChange }) {
   const { perfil } = useAuth();
   const permisos = perfil?.rol?.permisos || {};
   const [texto, setTexto] = useState(clienteNombre ?? "");
@@ -102,8 +105,8 @@ export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
       setError("El nombre del cliente es obligatorio");
       return;
     }
-    if (!nuevo.cedula.trim()) {
-      setError("La cédula es obligatoria (la piden las empresas de envío)");
+    if (cedulaObligatoria && !nuevo.cedula.trim()) {
+      setError("La cédula es obligatoria para envíos por encomienda (la piden las empresas de envío)");
       return;
     }
     if (duplicado) {
@@ -187,10 +190,10 @@ export function SelectorCliente({ clienteNombre, clienteId, onChange }) {
               />
               <input
                 type="text"
-                placeholder="Cédula (obligatoria)"
+                placeholder={cedulaObligatoria ? "Cédula (obligatoria para Encomienda)" : "Cédula (opcional)"}
                 value={nuevo.cedula}
                 onChange={(e) => setNuevo((p) => ({ ...p, cedula: e.target.value }))}
-                required
+                required={cedulaObligatoria}
               />
             </div>
             <div className="item-row">

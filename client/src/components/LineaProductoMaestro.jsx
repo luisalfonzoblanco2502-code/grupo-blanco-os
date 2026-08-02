@@ -61,8 +61,8 @@ export function LineaProductoMaestro({ linea, autoFocus, onCambiar, onEliminar, 
   return (
     <div className="linea-card linea-producto-maestro fade-in">
       <div className="linea-producto-maestro-cuerpo">
-        {linea.imagenReferenciaProduccionUrl ? (
-          <img src={linea.imagenReferenciaProduccionUrl} alt="" className="linea-card-thumb" />
+        {linea.imagenReferenciaProduccionUrl || linea.imagenUrl ? (
+          <img src={linea.imagenReferenciaProduccionUrl || linea.imagenUrl} alt="" className="linea-card-thumb" />
         ) : (
           <div className="linea-card-thumb linea-card-thumb-vacia" aria-hidden="true" />
         )}

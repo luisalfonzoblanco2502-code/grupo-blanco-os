@@ -1228,6 +1228,12 @@ a.card:hover {
   overflow-y: auto;
 }
 
+/* "Ver todos los items": misma lista, más alta — sigue siendo un dropdown,
+   nunca un modal (ver nota de arriba). */
+.selector-producto-maestro-dropdown-todos {
+  max-height: 28rem;
+}
+
 .selector-producto-maestro-dropdown li {
   display: flex;
   align-items: center;

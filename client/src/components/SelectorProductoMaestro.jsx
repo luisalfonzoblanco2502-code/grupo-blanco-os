@@ -11,22 +11,28 @@ export const SelectorProductoMaestro = forwardRef(function SelectorProductoMaest
   const [query, setQuery] = useState("");
   const [abierto, setAbierto] = useState(false);
   const [indiceActivo, setIndiceActivo] = useState(0);
+  // "Ver todos": para quien no recuerda el código exacto — despliega la
+  // lista completa (respetando lo que se haya tipeado) en vez del recorte
+  // de 8 resultados que usa la búsqueda en vivo normal.
+  const [verTodos, setVerTodos] = useState(false);
 
-  const resultados = useMemo(() => {
+  const coincidencias = useMemo(() => {
     const texto = query.trim().toLowerCase();
-    const base = !texto
+    return !texto
       ? productos
       : productos.filter(
           (p) => p.nombre.toLowerCase().includes(texto) || p.codigo.toLowerCase().includes(texto)
         );
-    return base.slice(0, 8);
   }, [productos, query]);
+
+  const resultados = verTodos ? coincidencias : coincidencias.slice(0, 8);
 
   function elegir(producto) {
     onSeleccionar(producto);
     setQuery("");
     setAbierto(false);
     setIndiceActivo(0);
+    setVerTodos(false);
   }
 
   function manejarTeclado(e) {
@@ -51,24 +57,48 @@ export const SelectorProductoMaestro = forwardRef(function SelectorProductoMaest
 
   return (
     <div className="selector-producto-maestro">
-      <input
-        ref={ref}
-        type="text"
-        placeholder="Buscar producto por nombre o código..."
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setAbierto(true);
-          setIndiceActivo(0);
-        }}
-        onFocus={() => setAbierto(true)}
-        onBlur={() => setTimeout(() => setAbierto(false), 150)}
-        onKeyDown={manejarTeclado}
-        aria-label="Buscar producto"
-        autoComplete="off"
-      />
+      <div style={{ display: "flex", gap: "0.4rem" }}>
+        <input
+          ref={ref}
+          type="text"
+          placeholder="Buscar producto por nombre o código..."
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setAbierto(true);
+            setIndiceActivo(0);
+          }}
+          onFocus={() => setAbierto(true)}
+          onBlur={() => setTimeout(() => setAbierto(false), 150)}
+          onKeyDown={manejarTeclado}
+          aria-label="Buscar producto"
+          autoComplete="off"
+          style={{ flex: 1 }}
+        />
+        <button
+          type="button"
+          className="btn-ghost btn-sm"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            setVerTodos(true);
+            setAbierto(true);
+            setIndiceActivo(0);
+          }}
+        >
+          Ver todos los items
+        </button>
+      </div>
       {abierto && resultados.length > 0 && (
-        <ul className="selector-producto-maestro-dropdown" role="listbox">
+        <ul
+          className={`selector-producto-maestro-dropdown${verTodos ? " selector-producto-maestro-dropdown-todos" : ""}`}
+          role="listbox"
+        >
+          {verTodos && (
+            <li className="selector-producto-maestro-vacio" style={{ cursor: "default" }}>
+              Mostrando {resultados.length} de {productos.length} item{productos.length === 1 ? "" : "s"}
+              {query.trim() ? ` (filtrado por "${query.trim()}")` : ""}
+            </li>
+          )}
           {resultados.map((p, i) => (
             <li
               key={p.id}
