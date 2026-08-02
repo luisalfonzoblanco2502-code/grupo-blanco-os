@@ -177,7 +177,14 @@ async function obtenerProductoMaestroBloqueado(tx, { empresaId, productoId }) {
     forro: fila.forro,
     tiras: fila.tiras,
     insumosDescripcion: fila.insumos_descripcion,
+    // Catálogo regular usa imagen_url; personalizados usan
+    // imagen_referencia_produccion_url — el snapshot hace el mismo
+    // fallback que ya usa el buscador de Producto Maestro en el frontend
+    // (ver construirSnapshotDesdeProducto más abajo), para que la línea
+    // guardada siempre tenga la miniatura correcta sin importar cuál de
+    // las dos columnas se pobló.
     imagenReferenciaProduccionUrl: fila.imagen_referencia_produccion_url,
+    imagenUrl: fila.imagen_url,
     moldeUrl: fila.molde_url,
     tiempoProduccionMinutos: fila.tiempo_produccion_minutos,
     instruccionesProduccion: fila.instrucciones_produccion,
@@ -232,7 +239,7 @@ export async function construirSnapshotDesdeProducto(tx, { empresaId, productoId
     tiras: producto.tiras,
     insumos: producto.insumosDescripcion,
     productoInternoId: producto.productoInternoId,
-    imagenReferenciaProduccionUrl: producto.imagenReferenciaProduccionUrl,
+    imagenReferenciaProduccionUrl: producto.imagenReferenciaProduccionUrl || producto.imagenUrl,
     moldeUrlSnapshot: producto.moldeUrl,
     tiempoProduccionMinutosSnapshot: producto.tiempoProduccionMinutos,
     instruccionesProduccionSnapshot: producto.instruccionesProduccion,

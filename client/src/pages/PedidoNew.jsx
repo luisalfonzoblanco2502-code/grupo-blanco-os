@@ -609,8 +609,27 @@ export function PedidoNew() {
             titulo="Ítems del pedido"
             subtitulo={`${lineas.length} línea${lineas.length === 1 ? "" : "s"} · cantidad total ${cantidadTotal} · estimado ${totalEstimado.toFixed(2)}`}
           >
+            <div className="lineas-lista">
+              {lineas.map((linea) => (
+                <LineaProductoMaestro
+                  key={linea._key}
+                  linea={linea}
+                  autoFocus={linea._key === ultimaLineaKey}
+                  puedeEditarPrecio={puedeEditarPrecio}
+                  onCambiar={(cambios) => actualizarLineaProductoMaestro(linea._key, cambios)}
+                  onEliminar={() => eliminarLineaPorKey(linea._key)}
+                  onContinuar={() => buscadorRef.current?.focus()}
+                />
+              ))}
+              {lineas.length === 0 && (
+                <p className="card-label">Elegí uno de los dos botones de abajo para agregar el primer ítem.</p>
+              )}
+            </div>
+            {/* Botones de ingresar item DEBAJO de la lista (2026-08-02): el
+                flujo natural es ver lo ya agregado y seguir agregando más
+                abajo, como una lista que crece hacia abajo. */}
             {modoAgregar ? (
-              <div className="panel" style={{ marginBottom: "0.75rem" }}>
+              <div className="panel" style={{ marginTop: "0.75rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
                   <b>{modoAgregar === "regular" ? "Catálogo regular" : "Producto personalizado"}</b>
                   <button type="button" className="btn-ghost btn-sm" onClick={() => setModoAgregar(null)}>
@@ -626,7 +645,7 @@ export function PedidoNew() {
                 />
               </div>
             ) : (
-              <div className="agregar-producto-barra" style={{ marginBottom: "0.75rem", gap: "0.5rem" }}>
+              <div className="agregar-producto-barra" style={{ marginTop: "0.75rem", gap: "0.5rem" }}>
                 <button type="button" className="btn-primary btn-sm" onClick={() => setModoAgregar("regular")}>
                   ➕ Ingresar ITEM (Catálogo regular)
                 </button>
@@ -635,22 +654,6 @@ export function PedidoNew() {
                 </button>
               </div>
             )}
-            <div className="lineas-lista">
-              {lineas.map((linea) => (
-                <LineaProductoMaestro
-                  key={linea._key}
-                  linea={linea}
-                  autoFocus={linea._key === ultimaLineaKey}
-                  puedeEditarPrecio={puedeEditarPrecio}
-                  onCambiar={(cambios) => actualizarLineaProductoMaestro(linea._key, cambios)}
-                  onEliminar={() => eliminarLineaPorKey(linea._key)}
-                  onContinuar={() => buscadorRef.current?.focus()}
-                />
-              ))}
-              {lineas.length === 0 && (
-                <p className="card-label">Elegí uno de los dos botones de arriba para agregar el primer ítem.</p>
-              )}
-            </div>
           </FormSection>
         )}
 

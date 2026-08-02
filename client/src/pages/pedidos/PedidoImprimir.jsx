@@ -73,39 +73,71 @@ export function PedidoImprimir() {
 
         <section>
           <h2>Órdenes de producción</h2>
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th>OP</th>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Etapa</th>
-                <th>Prioridad</th>
-                <th>Responsable</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pedido.ordenesProduccion.map((orden) => (
-                <tr key={orden.id} style={{ pageBreakInside: "avoid" }}>
-                  <td>{orden.opId}</td>
-                  <td>{orden.producto}</td>
-                  <td>{orden.cantidad}</td>
-                  <td>
-                    <Badge>{orden.etapa.nombre}</Badge>
-                  </td>
-                  <td>
-                    <Badge>{orden.prioridad.nombre}</Badge>
-                  </td>
-                  <td>{orden.responsableUsuario?.nombre ?? orden.responsableExterno ?? "—"}</td>
-                </tr>
-              ))}
-              {pedido.ordenesProduccion.length === 0 && (
-                <tr>
-                  <td colSpan={6}>Este pedido no tiene órdenes de producción todavía.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          {pedido.ordenesProduccion.length === 0 && (
+            <p>Este pedido no tiene órdenes de producción todavía.</p>
+          )}
+          {pedido.ordenesProduccion.map((orden) => {
+            // "Una sola OP por Pedido" (2026-08-02): lo normal es que haya
+            // UNA orden con todos los productos del pedido adentro — el
+            // detalle real de cada producto vive en pedido.lineas (nunca en
+            // orden.producto, que acá es solo un resumen tipo "13 productos").
+            // Se sigue iterando ordenesProduccion (no asumir longitud 1) por
+            // el único caso real que separa en más de una: responsables
+            // distintos por línea (ver claveDeGrupo, ordenesProduccion.service.js).
+            const lineasDeEstaOrden = (pedido.lineas || []).filter((l) => l.ordenProduccionId === orden.id);
+            return (
+              <div key={orden.id} style={{ marginBottom: "1.25rem", pageBreakInside: "avoid" }}>
+                <div className="op-grid" style={{ marginBottom: "0.5rem" }}>
+                  <div className="op-campo">
+                    <span className="op-campo-label">Orden de Producción</span>
+                    <span className="op-campo-valor">{orden.opId}</span>
+                  </div>
+                  <div className="op-campo">
+                    <span className="op-campo-label">Etapa</span>
+                    <span className="op-campo-valor">
+                      <Badge>{orden.etapa.nombre}</Badge>
+                    </span>
+                  </div>
+                  <div className="op-campo">
+                    <span className="op-campo-label">Prioridad</span>
+                    <span className="op-campo-valor">
+                      <Badge>{orden.prioridad.nombre}</Badge>
+                    </span>
+                  </div>
+                  <div className="op-campo">
+                    <span className="op-campo-label">Responsable</span>
+                    <span className="op-campo-valor">{orden.responsableUsuario?.nombre ?? orden.responsableExterno ?? "—"}</span>
+                  </div>
+                </div>
+                <table className="tabla">
+                  <thead>
+                    <tr>
+                      <th>Imagen</th>
+                      <th>Producto</th>
+                      <th>Cantidad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(lineasDeEstaOrden.length > 0 ? lineasDeEstaOrden : [null]).map((linea, i) =>
+                      linea ? (
+                        <tr key={linea.id} style={{ pageBreakInside: "avoid" }}>
+                          <td>
+                            <ImagenProducto linea={linea} />
+                          </td>
+                          <td>{linea.producto}</td>
+                          <td>{linea.cantidad}</td>
+                        </tr>
+                      ) : (
+                        <tr key={i}>
+                          <td colSpan={3}>{orden.producto}</td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
         </section>
 
         <footer className="op-pie">
@@ -115,5 +147,25 @@ export function PedidoImprimir() {
         </footer>
       </div>
     </div>
+  );
+}
+
+// Miniatura por producto (Cambio 3, 2026-08-02): foto de referencia del
+// catálogo (o del personalizado) si existe; si no, la foto que subió el
+// cliente para un producto personalizado (archivosAdjuntos, principal
+// primero). Sin ninguna de las dos, un placeholder vacío del mismo tamaño
+// para que la tabla no se descuadre.
+function ImagenProducto({ linea }) {
+  const principal = linea.archivosAdjuntos?.find((a) => a.esPrincipal);
+  const url = linea.imagenReferenciaProduccionUrl || principal?.ubicacion || linea.archivosAdjuntos?.[0]?.ubicacion;
+  if (!url) {
+    return <div style={{ width: "40px", height: "40px", borderRadius: "6px", background: "var(--surface-sunken)" }} />;
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "6px" }}
+    />
   );
 }

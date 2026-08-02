@@ -212,26 +212,25 @@ function validarLineas(lineas) {
 
 const ETAPA_INICIAL_NOMBRE = "Pedido recibido";
 
-// Clave de agrupación (OP agrupada por lote, 2026-07-29, propuesta aprobada
-// "Orden de Producción agrupada por lote"): dos líneas del MISMO pedido
-// entran a la MISMA OP si coinciden en producto/tela/tipo de impresión/
-// prioridad/responsable. Imagen, talla, color, medida, nombre/número
-// personalizado, descripción y observaciones NUNCA entran acá — pueden
-// variar libremente dentro del mismo lote. Una línea con separarEnOtraOp
-// nunca se agrupa con nadie, sin importar qué tan bien coincida.
+// Clave de agrupación (2026-08-02, "Una sola Orden de Producción por
+// Pedido"): el criterio dejó de incluir producto/tela/tipo de impresión —
+// TODAS las líneas de un pedido entran a la MISMA OP salvo que de verdad
+// tengan responsable o prioridad distintos (ej. un producto va a un taller
+// externo y otro se hace interno). Ese es el único caso real que sigue
+// generando más de una OP por pedido; en el caso normal (mismo responsable
+// para todo el pedido, que es el flujo por defecto de Facturar Pedido)
+// nace UNA sola OP con todas las líneas como variantes. Antes de este
+// cambio se agrupaba también por producto/tela/tipoImpresion, lo que
+// fragmentaba pedidos con muchos productos distintos en una OP por cada
+// uno (ver migración de consolidación de PED-0004, backups/). Una línea
+// con separarEnOtraOp nunca se agrupa con nadie, sin importar qué tan bien
+// coincida.
 function claveDeGrupo(linea) {
   if (linea.separarEnOtraOp) return `solo:${linea.pedidoLineaId}`;
-  const producto = linea.productoInternoId || normalizarParaComparar(linea.producto);
   const responsable = linea.responsableUsuarioId
     ? `usuario:${linea.responsableUsuarioId}`
     : `externo:${normalizarParaComparar(linea.responsableExterno)}`;
-  return [
-    producto,
-    normalizarParaComparar(linea.tela),
-    normalizarParaComparar(linea.tipoImpresion),
-    linea.prioridadId,
-    responsable,
-  ].join("||");
+  return [linea.prioridadId, responsable].join("||");
 }
 
 // Suma la cantidad de todas las variantes vinculadas — se recalcula (no se
@@ -339,13 +338,21 @@ async function crearOrdenesDesdeLineas({ tx, pedido, empresaId, usuarioId, linea
     const cantidadTotal = lineasDelGrupo.reduce((s, l) => s + Number(l.cantidad || 0), 0);
     const opId = siguienteNumero(opIdsUsados, pedido.pedId, 2);
     opIdsUsados.push(opId);
+    // "producto" es un resumen legible cuando el lote tiene más de un
+    // producto distinto — el detalle real de cada uno vive en `variantes`
+    // (PedidoLinea), nunca en esta columna. Con 1 sola línea se mantiene el
+    // nombre real, igual que siempre.
+    const productoResumen =
+      lineasDelGrupo.length === 1
+        ? primeraLinea.producto.trim()
+        : `${lineasDelGrupo.length} productos`;
 
     const orden = await tx.ordenProduccion.create({
       data: {
         pedidoId: pedido.id,
         empresaId,
         opId,
-        producto: primeraLinea.producto.trim(),
+        producto: productoResumen,
         cantidad: cantidadTotal,
         tipoTrabajo: primeraLinea.tipoTrabajo?.trim() || null,
         medida: primeraLinea.medida?.trim() || null,
