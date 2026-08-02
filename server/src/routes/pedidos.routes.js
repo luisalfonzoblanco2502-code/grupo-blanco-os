@@ -108,6 +108,23 @@ pedidosRouter.patch("/:id/cancelar", requirePermiso("eliminar_pedido"), async (r
   }
 });
 
+// "Eliminar pedido" (solo Administrador) — distinto de /cancelar arriba:
+// funciona en cualquier estado, incluso ya facturado. Permiso propio
+// (eliminar_pedido_definitivo), otorgado SOLO a ADMINISTRADOR vía dato,
+// nunca a Supervisor (que sí tiene eliminar_pedido para /cancelar).
+pedidosRouter.delete("/:id", requirePermiso("eliminar_pedido_definitivo"), async (req, res, next) => {
+  try {
+    const pedido = await pedidosService.eliminarPedidoDefinitivo(
+      req.params.id,
+      req.usuario.empresaId,
+      req.usuario.id
+    );
+    res.json(pedido);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // "Capturar una sola vez": el cuerpo ya NO trae los datos técnicos de cada
 // línea (eso lo capturó la vendedora en pedido_lineas) — solo la asignación
 // de responsable/prioridad que le corresponde decidir al Administrador en

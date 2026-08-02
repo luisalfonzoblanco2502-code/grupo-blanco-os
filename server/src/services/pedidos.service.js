@@ -354,3 +354,45 @@ export async function cambiarEstadoPedidoManual(pedidoId, empresaId, usuarioId, 
     return { ...pedido, estado: estadoNuevo };
   }, TRANSACTION_OPTIONS);
 }
+
+// "Eliminar pedido" (solo Administrador, permiso eliminar_pedido_definitivo)
+// — a diferencia de cancelarPedido, funciona en CUALQUIER estado (decisión
+// explícita del usuario: incluso un pedido ya facturado con producción
+// real en curso). Deliberadamente NUNCA toca OrdenProduccion/DocumentoVenta/
+// PagoIngreso/CostoPedido/PedidoLinea — esos registros son historia real
+// (pueden incluir pagos ya cobrados) y no se hard-deletean ni se
+// re-encadenan nunca en este sistema. Lo único que cambia es
+// pedidos.eliminado_en: el pedido deja de aparecer en listados normales
+// (mismo filtro `eliminadoEn: null` que ya usa toda consulta de negocio),
+// pero nada de lo real que ya ocurrió se pierde ni se reescribe. Tampoco se
+// fuerza ninguna transición de estado (CANCELADO no es alcanzable desde
+// FACTURADO en adelante, y forzarlo mentiría sobre la historia real) — el
+// pedido queda marcado eliminado, con el estado que ya tenía intacto.
+export async function eliminarPedidoDefinitivo(pedidoId, empresaId, usuarioId) {
+  return prisma.$transaction(async (tx) => {
+    const actual = await tx.pedido.findFirst({ where: { id: pedidoId, empresaId, eliminadoEn: null } });
+    if (!actual) throw new NoEncontradoError("Pedido no encontrado");
+
+    const estadoAlEliminar = await obtenerEstadoPedido(tx, pedidoId);
+
+    const pedido = await tx.pedido.update({
+      where: { id: pedidoId },
+      data: { eliminadoEn: new Date() },
+      include: INCLUDE_DETALLE,
+    });
+
+    await registrarAuditoria(tx, {
+      empresaId,
+      usuarioId,
+      accion: "pedido.eliminado_por_admin",
+      detalle: {
+        pedidoId,
+        pedId: actual.pedId,
+        clienteNombre: actual.clienteNombre,
+        estadoAlEliminar,
+      },
+    });
+
+    return { ...pedido, estado: estadoAlEliminar };
+  }, TRANSACTION_OPTIONS);
+}
