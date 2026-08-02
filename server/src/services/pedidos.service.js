@@ -358,16 +358,14 @@ export async function cambiarEstadoPedidoManual(pedidoId, empresaId, usuarioId, 
 // "Eliminar pedido" (solo Administrador, permiso eliminar_pedido_definitivo)
 // — a diferencia de cancelarPedido, funciona en CUALQUIER estado (decisión
 // explícita del usuario: incluso un pedido ya facturado con producción
-// real en curso). Deliberadamente NUNCA toca OrdenProduccion/DocumentoVenta/
-// PagoIngreso/CostoPedido/PedidoLinea — esos registros son historia real
-// (pueden incluir pagos ya cobrados) y no se hard-deletean ni se
-// re-encadenan nunca en este sistema. Lo único que cambia es
-// pedidos.eliminado_en: el pedido deja de aparecer en listados normales
-// (mismo filtro `eliminadoEn: null` que ya usa toda consulta de negocio),
-// pero nada de lo real que ya ocurrió se pierde ni se reescribe. Tampoco se
-// fuerza ninguna transición de estado (CANCELADO no es alcanzable desde
-// FACTURADO en adelante, y forzarlo mentiría sobre la historia real) — el
-// pedido queda marcado eliminado, con el estado que ya tenía intacto.
+// real en curso). Corrección 2026-08-01: en cascada SOLO a
+// OrdenProduccion (soft-delete, mismo campo eliminadoEn) — antes quedaban
+// huérfanas, visibles en Kanban/listados de Producción con un pedido que
+// ya no existe. Sigue sin tocar NUNCA DocumentoVenta/PagoIngreso/
+// CostoPedido/PedidoLinea — esos registros pueden incluir pagos reales ya
+// cobrados y jamás se hard-deletean ni se re-encadenan en este sistema.
+// Tampoco fuerza ninguna transición de estado (CANCELADO no es alcanzable
+// desde FACTURADO en adelante, y forzarlo mentiría sobre la historia real).
 export async function eliminarPedidoDefinitivo(pedidoId, empresaId, usuarioId) {
   return prisma.$transaction(async (tx) => {
     const actual = await tx.pedido.findFirst({ where: { id: pedidoId, empresaId, eliminadoEn: null } });
@@ -375,9 +373,35 @@ export async function eliminarPedidoDefinitivo(pedidoId, empresaId, usuarioId) {
 
     const estadoAlEliminar = await obtenerEstadoPedido(tx, pedidoId);
 
+    const ordenesActivas = await tx.ordenProduccion.findMany({
+      where: { pedidoId, empresaId, eliminadoEn: null },
+      select: { id: true, opId: true },
+    });
+    const ahora = new Date();
+    if (ordenesActivas.length > 0) {
+      await tx.ordenProduccion.updateMany({
+        where: { id: { in: ordenesActivas.map((o) => o.id) } },
+        data: { eliminadoEn: ahora },
+      });
+      // Una fila por OP en su propia bitácora (append-only, mismo criterio
+      // que cambio_etapa/cambio_responsable) — además de la auditoría a
+      // nivel de pedido de más abajo.
+      await tx.bitacoraEvento.createMany({
+        data: ordenesActivas.map((o) => ({
+          ordenProduccionId: o.id,
+          empresaId,
+          tipoEvento: "orden_eliminada_por_admin",
+          campoAfectado: "Eliminado",
+          valorAnterior: "activa",
+          valorNuevo: "eliminada (pedido eliminado)",
+          usuarioId,
+        })),
+      });
+    }
+
     const pedido = await tx.pedido.update({
       where: { id: pedidoId },
-      data: { eliminadoEn: new Date() },
+      data: { eliminadoEn: ahora },
       include: INCLUDE_DETALLE,
     });
 
@@ -390,9 +414,11 @@ export async function eliminarPedidoDefinitivo(pedidoId, empresaId, usuarioId) {
         pedId: actual.pedId,
         clienteNombre: actual.clienteNombre,
         estadoAlEliminar,
+        ordenesEliminadas: ordenesActivas.length,
+        opIds: ordenesActivas.map((o) => o.opId),
       },
     });
 
-    return { ...pedido, estado: estadoAlEliminar };
+    return { ...pedido, estado: estadoAlEliminar, ordenesEliminadas: ordenesActivas.length };
   }, TRANSACTION_OPTIONS);
 }
