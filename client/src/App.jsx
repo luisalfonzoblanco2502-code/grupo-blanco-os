@@ -40,7 +40,13 @@ function pagina(elemento, permiso) {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <div className="bg-blobs" aria-hidden="true">
+        <span className="blob blob-azul" />
+        <span className="blob blob-violeta" />
+        <span className="blob blob-rosa" />
+      </div>
+      <Routes>
       <Route path="/login" element={<Login />} />
 
       <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
@@ -216,7 +222,8 @@ export default function App() {
         <Route path="productos/nuevo" element={pagina(<ProductoNew />)} />
         <Route path="productos/:id/editar" element={pagina(<ProductoEdit />)} />
       </Route>
-    </Routes>
+      </Routes>
+    </>
   );
 }
 
