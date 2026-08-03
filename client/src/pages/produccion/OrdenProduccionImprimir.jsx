@@ -126,20 +126,25 @@ export function OrdenProduccionImprimir() {
 
           {variantes.length > 0 ? (
             <div className="op-variantes-impresion">
-              {variantes.map((v, i) => {
-                const img = v.archivosAdjuntos?.find((a) => a.esPrincipal);
+              {variantes.map((v) => {
+                const archivoPrincipal = v.archivosAdjuntos?.find((a) => a.esPrincipal);
                 const adjuntos = v.archivosAdjuntos?.filter((a) => !a.esPrincipal) ?? [];
+                // Catálogo regular: la foto real vive en imagenReferenciaProduccionUrl
+                // (snapshot del Producto Maestro al facturar). Personalizado: vive
+                // en archivosAdjuntos (la foto que subió el cliente). Nunca las
+                // dos a la vez en la práctica — se prueban en ese orden.
+                const imagenMostrar = v.imagenReferenciaProduccionUrl || archivoPrincipal?.ubicacion;
                 return (
                   <div className="op-variante-impresion" key={v.id} style={{ pageBreakInside: "avoid" }}>
                     <div className="op-variante-impresion-imagen">
-                      {img ? (
-                        <img src={img.ubicacion} alt="Arte aprobado" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                      {imagenMostrar ? (
+                        <img src={imagenMostrar} alt="Arte aprobado" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                       ) : (
                         <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Sin imagen —</span>
                       )}
                     </div>
                     <div className="op-variante-impresion-datos">
-                      <strong>Variante {i + 1}</strong>
+                      <strong>{v.producto}</strong>
                       <div className="op-grid">
                         <Campo label="Cantidad" valor={v.cantidad} />
                         <Campo label="Talla" valor={v.talla} />
