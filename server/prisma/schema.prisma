@@ -504,18 +504,47 @@ model SolicitudPedido {
 /// superior izquierda"). El precio unitario estimado se congela al crear la
 /// solicitud (aplicando ProductoPrecioVolumen) para que cambios posteriores
 /// de precio no alteren solicitudes ya enviadas.
+/// Bandeja de Solicitudes (2026-08-02): productoId ahora es OPCIONAL — un
+/// item "100% diseño personalizado" (sin producto de catálogo detrás) no
+/// tiene a qué producto real vincularse. En ese caso se usan
+/// productoNombrePersonalizado (texto libre, ej. "Pañoleta") y
+/// disenoFotoUrl (la foto que subió el cliente) en su lugar. El CHECK real
+/// de la base (chk_solicitud_item_producto_o_personalizado) exige que
+/// exista al menos una de las dos formas de describir qué se pidió.
 model SolicitudPedidoItem {
-  id                     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  solicitudId            String          @map("solicitud_id") @db.Uuid
-  solicitud              SolicitudPedido @relation(fields: [solicitudId], references: [id])
-  productoId             String          @map("producto_id") @db.Uuid
-  producto               Producto        @relation(fields: [productoId], references: [id])
-  cantidad               Int
-  disenoNotas            String?         @map("diseno_notas")
-  precioUnitarioEstimado Decimal?        @map("precio_unitario_estimado") @db.Decimal(10, 2)
+  id                          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  solicitudId                 String          @map("solicitud_id") @db.Uuid
+  solicitud                   SolicitudPedido @relation(fields: [solicitudId], references: [id])
+  productoId                  String?         @map("producto_id") @db.Uuid
+  producto                    Producto?       @relation(fields: [productoId], references: [id])
+  cantidad                    Int
+  disenoNotas                 String?         @map("diseno_notas")
+  precioUnitarioEstimado      Decimal?        @map("precio_unitario_estimado") @db.Decimal(10, 2)
+  /// Solo cuando productoId es NULL — nombre del producto base elegido en
+  /// "Personaliza tus diseños" (ej. "Pañoleta", "Pareo").
+  productoNombrePersonalizado String?         @map("producto_nombre_personalizado")
+  /// Solo cuando productoId es NULL — foto subida por el cliente vía
+  /// POST /api/publico/solicitudes/foto (Storage, bucket público de subidas).
+  disenoFotoUrl               String?         @map("diseno_foto_url")
 
   @@index([solicitudId])
   @@map("solicitud_pedido_items")
+}
+
+/// Log de subidas al endpoint público de fotos (catálogo, sin auth) —
+/// doble propósito: rate limiting por IP (se cuentan filas recientes antes
+/// de aceptar una subida nueva) y auditoría básica. Nunca se expone por
+/// API — solo lo lee el propio endpoint de subida.
+model SolicitudFotoUploadLog {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ip            String
+  tamanoBytes   Int      @map("tamano_bytes")
+  exitoso       Boolean
+  motivoRechazo String?  @map("motivo_rechazo")
+  creadoEn      DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  @@index([ip, creadoEn])
+  @@map("solicitud_foto_uploads_log")
 }
 
 // ----------------------------------------------------------------------------

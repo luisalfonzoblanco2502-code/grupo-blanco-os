@@ -35,9 +35,12 @@ solicitudesRouter.patch("/:id/estado", async (req, res, next) => {
   }
 });
 
+// "Aprobar y convertir" (2026-08-02): un solo clic hace ambas cosas — antes
+// exigía Aprobar como paso separado. "Solo aprobar" (sin convertir todavía)
+// sigue disponible como PATCH /:id/estado con estadoNuevo=APROBADA.
 solicitudesRouter.post("/:id/convertir", async (req, res, next) => {
   try {
-    const resultado = await solicitudesService.convertirSolicitud(
+    const resultado = await solicitudesService.aprobarYConvertirSolicitud(
       req.params.id,
       req.usuario.empresaId,
       req.usuario.id,

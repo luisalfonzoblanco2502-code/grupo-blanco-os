@@ -2,7 +2,7 @@ import { prisma, TRANSACTION_OPTIONS } from "../db.js";
 import { NoEncontradoError, ValidacionError, PermisoDenegadoError } from "./errors.js";
 import { siguienteNumero } from "./numeracion.service.js";
 import { on, emit } from "../events/eventBus.js";
-import { PEDIDO_FACTURADO, ORDEN_CREADA, ORDEN_ETAPA_CAMBIADA, ORDEN_CERRADA } from "../events/eventos.js";
+import { PEDIDO_FACTURADO, PEDIDO_ESTADO_CAMBIADO, ORDEN_CREADA, ORDEN_ETAPA_CAMBIADA, ORDEN_CERRADA } from "../events/eventos.js";
 import { obtenerEstadoPedido, cambiarEstadoPedido } from "./pedidoEstado.service.js";
 import { normalizarParaComparar } from "./pedidoLineas.service.js";
 
@@ -437,6 +437,20 @@ async function avanzarEstadoPedidoSegunEtapa({ tx, orden, empresaId, usuarioId }
         usuarioId,
         estadoNuevo,
         automatico: true,
+      });
+      // A diferencia de facturarPedido()/cambiarEstadoPedidoManual (que
+      // emiten esto ellos mismos justo después de cambiarEstadoPedido), esta
+      // transición automática nunca lo emitía — así que nada que escuche
+      // "el estado del pedido cambió" (ej. sincronizarEstadoPublicoSolicitud
+      // en solicitudes.service.js) se enteraba de EN_PRODUCCION/LISTO/
+      // ENTREGADO cuando pasaban solas por avance de etapa. Bug corregido
+      // 2026-08-02 (Bandeja de Solicitudes, Paso 3).
+      await emit(PEDIDO_ESTADO_CAMBIADO, {
+        tx,
+        pedido: { id: orden.pedidoId },
+        empresaId,
+        usuarioId,
+        estadoNuevo,
       });
     } catch (err) {
       // No es un error real: la condición se cumplió pero la transición ya

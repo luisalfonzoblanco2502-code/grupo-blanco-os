@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getProductos,
   intentarCrearSolicitudEnERP,
+  subirFotoDiseno,
   armarLinkWhatsApp,
   armarLinkWhatsAppGenerico,
   consultarRastreo,
@@ -1097,32 +1098,51 @@ export function App() {
     setEnviando(true);
     setPasoEnvio("Guardando tu pedido...");
 
-    // crearSolicitudPublica exige productoId real de catálogo — los
-    // diseños personalizados todavía no se sincronizan al ERP (ver nota en
-    // agregarDisenoAlCarrito), así que se excluyen de este envío; igual
-    // viajan completos en el PDF y en el mensaje de WhatsApp.
     const itemsCatalogo = lineasConSubtotal
       .filter((l) => l.tipo !== "personalizado")
       .map((l) => ({ productoId: l.producto.id, cantidad: l.cantidad, disenoNotas: l.disenoNotas || undefined }));
 
-    let ordenFinal = null;
-    let ordenEsReal = false;
-    if (itemsCatalogo.length > 0) {
-      const resultado = await intentarCrearSolicitudEnERP({
-        clienteNombre: cliente.nombre,
-        clienteTelefono: cliente.telefono,
-        notasPersonalizacion: `Ubicación: ${cliente.ubicacion}`,
-        tipoEntrega: cliente.tipoEntrega || undefined,
-        items: itemsCatalogo,
-      });
-      setAvisoErp(resultado);
-      if (resultado.ok && resultado.numeroOrden) {
-        ordenFinal = resultado.numeroOrden;
-        ordenEsReal = true;
-      }
-    } else {
-      setAvisoErp({ ok: false, motivo: "pedido compuesto solo por diseños personalizados: todavía no se registra en el ERP" });
+    // Diseños 100% personalizados YA sincronizan al ERP (corrección
+    // 2026-08-02 — antes se excluían del todo porque crearSolicitudPublica
+    // exigía productoId real de catálogo). Cada uno sube su foto primero
+    // (si la hay) y viaja como productoNombrePersonalizado + disenoFotoUrl,
+    // sin producto de catálogo real detrás. Si la foto falla al subir, la
+    // línea igual se manda (sin foto) — nunca bloquea el envío del pedido
+    // por un problema de red en la subida.
+    const lineasPersonalizadas = lineasConSubtotal.filter((l) => l.tipo === "personalizado");
+    if (lineasPersonalizadas.some((l) => l.archivoLocal)) {
+      setPasoEnvio("Subiendo tu diseño...");
     }
+    const itemsPersonalizados = await Promise.all(
+      lineasPersonalizadas.map(async (l) => {
+        let disenoFotoUrl;
+        if (l.archivoLocal) {
+          try {
+            disenoFotoUrl = await subirFotoDiseno(l.archivoLocal);
+          } catch (err) {
+            console.warn("No se pudo subir la foto del diseño personalizado:", err.message);
+          }
+        }
+        return {
+          productoNombrePersonalizado: l.producto.categoria,
+          cantidad: l.cantidad,
+          disenoNotas: l.disenoNotas || undefined,
+          disenoFotoUrl,
+        };
+      })
+    );
+
+    setPasoEnvio("Guardando tu pedido...");
+    const resultado = await intentarCrearSolicitudEnERP({
+      clienteNombre: cliente.nombre,
+      clienteTelefono: cliente.telefono,
+      notasPersonalizacion: `Ubicación: ${cliente.ubicacion}`,
+      tipoEntrega: cliente.tipoEntrega || undefined,
+      items: [...itemsCatalogo, ...itemsPersonalizados],
+    });
+    setAvisoErp(resultado);
+    let ordenFinal = resultado.ok && resultado.numeroOrden ? resultado.numeroOrden : null;
+    const ordenEsReal = !!ordenFinal;
     if (!ordenFinal) ordenFinal = numeroOrdenLocal();
     setNumeroOrden(ordenFinal);
     setNumeroOrdenRastreable(ordenEsReal);

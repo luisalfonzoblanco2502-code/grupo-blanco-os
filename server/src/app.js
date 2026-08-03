@@ -39,7 +39,12 @@ export const app = express();
 // catalogo.panaprice.com) pero pegan al mismo backend.
 const origenesPermitidos = (process.env.CORS_ORIGIN || "*").split(",").map((o) => o.trim());
 app.use(cors({ origin: origenesPermitidos.includes("*") ? "*" : origenesPermitidos }));
-app.use(express.json());
+// Límite subido de 100kb (default de Express) a 10mb — el único motivo es
+// POST /api/publico/solicitudes/foto (base64 de hasta 5MB reales, ~6.7MB
+// codificado); subidaPublica.service.js valida el tamaño real de todos
+// modos, este límite solo evita que Express rechace el body antes de
+// llegar ahí.
+app.use(express.json({ limit: "10mb" }));
 app.use(medirTiempos);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));

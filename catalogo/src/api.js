@@ -16,9 +16,9 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 const DATA_SOURCE = import.meta.env.VITE_DATA_SOURCE || "local";
 const TIMEOUT_MS = 4000;
 
-async function fetchConTimeout(path, options = {}) {
+async function fetchConTimeout(path, options = {}, timeoutMs = TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_URL}${path}`, {
       ...options,
@@ -96,6 +96,27 @@ export async function intentarCrearSolicitudEnERP(payload) {
   } catch (err) {
     return { ok: false, motivo: err.message };
   }
+}
+
+function archivoABase64(archivo) {
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onload = () => resolve(lector.result);
+    lector.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    lector.readAsDataURL(archivo);
+  });
+}
+
+// Sube la foto de un diseño personalizado ANTES de armar la solicitud —
+// devuelve la URL real en Storage (Bandeja de Solicitudes, 2026-08-02).
+// Timeout propio más largo que el resto de este archivo: es una subida de
+// hasta 5MB, 4s se queda corto en una conexión móvil lenta. Si falla, quien
+// llama debe seguir adelante sin foto (nunca bloquear el envío del pedido
+// por esto) — ver uso en App.jsx.
+export async function subirFotoDiseno(archivo) {
+  const archivoBase64 = await archivoABase64(archivo);
+  const data = await fetchConTimeout("/publico/solicitudes/foto", { method: "POST", body: JSON.stringify({ archivoBase64 }) }, 20000);
+  return data.url;
 }
 
 // Consulta pública de estado — usada por "Rastrea tu pedido". No depende de

@@ -89,6 +89,29 @@ function PanelGeneral() {
       <h1 style={{ fontWeight: 500 }}>Panel general</h1>
       <p className="pagina-subtitulo">Resumen ejecutivo de tu negocio</p>
 
+      {data.solicitudesNuevas > 0 && (
+        <Link
+          to="/solicitudes"
+          className="panel"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "1rem",
+            marginBottom: "1.25rem",
+            textDecoration: "none",
+            color: "inherit",
+            borderColor: "var(--accent)",
+          }}
+        >
+          <span>
+            📥 <strong>{data.solicitudesNuevas}</strong> solicitud{data.solicitudesNuevas === 1 ? "" : "es"} nueva
+            {data.solicitudesNuevas === 1 ? "" : "s"} del catálogo sin procesar
+          </span>
+          <span style={{ color: "var(--accent)", fontWeight: 600 }}>Revisar &rarr;</span>
+        </Link>
+      )}
+
       {/* Top 3 KPIs — tarjetas grandes */}
       <div
         style={{

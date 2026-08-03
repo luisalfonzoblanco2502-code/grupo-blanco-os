@@ -43,6 +43,13 @@ export const MODULOS = [
     ],
   },
   {
+    key: "solicitudes",
+    label: "Solicitudes",
+    icon: "📥",
+    path: "/solicitudes",
+    permiso: "ver_pedidos",
+  },
+  {
     key: "productos",
     label: "Productos",
     icon: "🏷",

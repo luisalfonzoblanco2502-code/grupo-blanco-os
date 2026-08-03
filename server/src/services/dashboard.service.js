@@ -232,7 +232,7 @@ export async function obtenerPanelGeneral(empresaId) {
   const en3dias = new Date(finHoy);
   en3dias.setDate(en3dias.getDate() + 3);
 
-  const [empresas, documentos, costos, ordenes, lineasPorProducto] = await Promise.all([
+  const [empresas, documentos, costos, ordenes, lineasPorProducto, solicitudesNuevas] = await Promise.all([
     prisma.empresa.findMany({ select: { id: true, nombre: true } }),
     // Ventana amplia (desde el inicio del mes anterior) para poder derivar
     // hoy/ayer/mes/mes anterior/tendencia 7 días de UNA sola consulta, en
@@ -265,6 +265,10 @@ export async function obtenerPanelGeneral(empresaId) {
       orderBy: { _sum: { cantidad: "desc" } },
       take: 1,
     }),
+    // Bandeja de Solicitudes (2026-08-02): cuántas llegaron del catálogo y
+    // todavía nadie las miró — el aviso en Panel General existe para que
+    // esto nunca se quede sin revisar por días.
+    prisma.solicitudPedido.count({ where: { empresaId, estado: "RECIBIDA" } }),
   ]);
 
   const sumaTotal = (docs) => docs.reduce((s, d) => s + Number(d.total), 0);
@@ -332,5 +336,6 @@ export async function obtenerPanelGeneral(empresaId) {
       : null,
     porEmpresa,
     tendencia7dias,
+    solicitudesNuevas,
   };
 }

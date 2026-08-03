@@ -3,14 +3,20 @@
 // mano pedidos de WhatsApp al ERP: `crearSolicitudPublica` es la única
 // puerta de entrada pública, y `convertirSolicitud` reutiliza el
 // `crearPedido()` de pedidos.service.js — no reimplementa esa lógica.
-import { prisma } from "../db.js";
+import { prisma, TRANSACTION_OPTIONS } from "../db.js";
 import { registrarAuditoria } from "./auditoria.service.js";
 import { siguienteNumero } from "./numeracion.service.js";
 import { ValidacionError, NoEncontradoError } from "./errors.js";
 import { precioUnitarioParaCantidad } from "./productos.service.js";
 import { crearPedido } from "./pedidos.service.js";
-import { emit } from "../events/eventBus.js";
-import { SOLICITUD_CREADA, SOLICITUD_ESTADO_CAMBIADO, SOLICITUD_CONVERTIDA } from "../events/eventos.js";
+import { buscarClientePorTelefonoOCedula, crearClienteManual } from "./clientes.service.js";
+import { on, emit } from "../events/eventBus.js";
+import {
+  SOLICITUD_CREADA,
+  SOLICITUD_ESTADO_CAMBIADO,
+  SOLICITUD_CONVERTIDA,
+  PEDIDO_ESTADO_CAMBIADO,
+} from "../events/eventos.js";
 
 export const ESTADOS_SOLICITUD = [
   "RECIBIDA",
@@ -34,7 +40,7 @@ const TRANSICIONES_SOLICITUD = {
 };
 
 const INCLUDE_DETALLE = {
-  items: { include: { producto: { select: { id: true, nombre: true, categoria: true } } } },
+  items: { include: { producto: { select: { id: true, nombre: true, categoria: true, imagenUrl: true } } } },
   pedido: { select: { id: true, pedId: true } },
 };
 
@@ -99,9 +105,14 @@ async function siguienteNumeroOrdenPublico(tx, empresaId) {
 }
 
 // Público, sin req.usuario — se usa desde catalogo.panaprice.com. Valida
-// cada producto contra la MISMA fuente de verdad que el catálogo público
-// (activo + publicadoCatalogo + de la empresa correcta), así que no se puede
-// solicitar un producto que el cliente nunca debió haber visto.
+// cada producto de catálogo contra la MISMA fuente de verdad que el
+// catálogo público (activo + publicadoCatalogo + de la empresa correcta),
+// así que no se puede solicitar un producto que el cliente nunca debió
+// haber visto. Los items de diseño 100% personalizado (sin productoId) se
+// aceptan igual — antes se descartaban del todo y el pedido nunca
+// sincronizaba con el ERP si SOLO tenía personalizados (bug corregido
+// 2026-08-02, ver nota en productoNombrePersonalizado/disenoFotoUrl del
+// schema).
 export async function crearSolicitudPublica(empresaId, { clienteNombre, clienteTelefono, clienteEmail, notasPersonalizacion, tipoEntrega, items }) {
   validarDatosContacto({ clienteNombre, clienteTelefono });
   const tipoEntregaValidado = validarTipoEntrega(tipoEntrega);
@@ -110,20 +121,36 @@ export async function crearSolicitudPublica(empresaId, { clienteNombre, clienteT
     throw new ValidacionError("La solicitud debe incluir al menos un producto");
   }
   for (const item of items) {
-    if (!item.productoId || !Number.isInteger(item.cantidad) || item.cantidad <= 0) {
-      throw new ValidacionError("Cada línea debe indicar productoId y una cantidad entera mayor a 0");
+    if (!Number.isInteger(item.cantidad) || item.cantidad <= 0) {
+      throw new ValidacionError("Cada línea debe indicar una cantidad entera mayor a 0");
+    }
+    if (!item.productoId && !item.productoNombrePersonalizado?.trim()) {
+      throw new ValidacionError("Cada línea debe indicar un productoId de catálogo o un nombre de diseño personalizado");
     }
   }
 
   return prisma.$transaction(async (tx) => {
-    const productoIds = [...new Set(items.map((i) => i.productoId))];
-    const productos = await tx.producto.findMany({
-      where: { id: { in: productoIds }, empresaId, activo: true, publicadoCatalogo: true, eliminadoEn: null },
-      include: { preciosVolumen: true },
-    });
+    const productoIds = [...new Set(items.filter((i) => i.productoId).map((i) => i.productoId))];
+    const productos = productoIds.length
+      ? await tx.producto.findMany({
+          where: { id: { in: productoIds }, empresaId, activo: true, publicadoCatalogo: true, eliminadoEn: null },
+          include: { preciosVolumen: true },
+        })
+      : [];
     const productosPorId = new Map(productos.map((p) => [p.id, p]));
 
     const itemsData = items.map((item) => {
+      if (!item.productoId) {
+        // Diseño 100% personalizado: sin producto de catálogo detrás.
+        return {
+          productoId: null,
+          cantidad: item.cantidad,
+          disenoNotas: item.disenoNotas?.trim() || null,
+          precioUnitarioEstimado: null,
+          productoNombrePersonalizado: item.productoNombrePersonalizado.trim(),
+          disenoFotoUrl: item.disenoFotoUrl?.trim() || null,
+        };
+      }
       const producto = productosPorId.get(item.productoId);
       if (!producto) {
         throw new ValidacionError(`Uno de los productos solicitados ya no está disponible en el catálogo`);
@@ -171,7 +198,7 @@ export async function crearSolicitudPublica(empresaId, { clienteNombre, clienteT
     await emit(SOLICITUD_CREADA, { tx, solicitud, empresaId });
 
     return solicitud;
-  });
+  }, TRANSACTION_OPTIONS);
 }
 
 // Público, sin req.usuario — usado por "Rastrea tu pedido" del catálogo.
@@ -248,52 +275,142 @@ export async function cambiarEstadoSolicitud(solicitudId, empresaId, usuarioId, 
     await emit(SOLICITUD_ESTADO_CAMBIADO, { tx, solicitud, empresaId, usuarioId, estadoNuevo });
 
     return solicitud;
-  });
+  }, TRANSACTION_OPTIONS);
 }
 
-// El paso que evita copiar el pedido a mano: crea un Pedido real
-// reutilizando pedidos.service.js tal cual lo usa el resto del ERP, y solo
-// después marca la solicitud como CONVERTIDA con el vínculo al pedido.
+// Cliente por teléfono (Paso 2.1): reutiliza EXACTAMENTE la búsqueda que ya
+// usa "Nuevo Pedido" — si dos solicitudes distintas traen el mismo teléfono,
+// las dos terminan en la misma ficha en vez de crear una por cada una. Si
+// crearClienteManual choca con el nombre (ya existe un cliente con ese
+// nombre pero otro teléfono — dato real de catálogo, no siempre limpio) no
+// se aborta la conversión entera: se sigue sin clienteId, igual que un
+// Nuevo Pedido manual cuando la vendedora no vincula ficha.
+async function obtenerOCrearClienteParaSolicitud(empresaId, solicitud) {
+  const existente = await buscarClientePorTelefonoOCedula(empresaId, { telefono: solicitud.clienteTelefono });
+  if (existente) return existente.id;
+
+  try {
+    const nuevo = await crearClienteManual(empresaId, {
+      nombre: solicitud.clienteNombre,
+      telefono: solicitud.clienteTelefono,
+      email: solicitud.clienteEmail,
+    });
+    return nuevo.id;
+  } catch (err) {
+    if (err instanceof ValidacionError) return null;
+    throw err;
+  }
+}
+
+// RETIRO/ENVIO (catálogo) -> RETIRO/ENCOMIENDA/DELIVERY (Pedido, ver
+// PedidoNew.jsx). ENVIO siempre trae posiblemente una agenciaEnvio (MRW,
+// Zoom, etc.) — el mismo concepto que direccionAgencia en Pedido — así que
+// mapea a ENCOMIENDA, no a DELIVERY.
+function mapearTipoEntrega(tipoEntregaSolicitud) {
+  if (tipoEntregaSolicitud === "RETIRO") return "RETIRO";
+  if (tipoEntregaSolicitud === "ENVIO") return "ENCOMIENDA";
+  return undefined;
+}
+
+// Cada SolicitudPedidoItem -> una línea de Pedido. Con productoId: se
+// vincula al Producto Maestro real (mismo camino que "Ingresar ITEM
+// Catálogo regular" en Nuevo Pedido — precio/tela/imagen los arma el
+// backend desde el snapshot). Sin productoId (diseño 100% personalizado):
+// línea manual con la foto que subió el cliente como archivo adjunto
+// principal, igual que "Ingresar ITEM PRODUCTO PERSONALIZADO".
+function lineaDesdeSolicitudItem(item) {
+  if (item.productoId) {
+    return {
+      productoId: item.productoId,
+      cantidad: item.cantidad,
+      observacionesProduccion: item.disenoNotas || undefined,
+    };
+  }
+  return {
+    producto: item.productoNombrePersonalizado || "Diseño personalizado",
+    cantidad: item.cantidad,
+    precioUnitario: item.precioUnitarioEstimado != null ? Number(item.precioUnitarioEstimado) : undefined,
+    observacionesProduccion: item.disenoNotas || undefined,
+    archivos: item.disenoFotoUrl
+      ? [
+          {
+            esPrincipal: true,
+            nombre: "diseno-cliente.jpg",
+            tipo: "image/jpeg",
+            tamano: 0,
+            ubicacion: item.disenoFotoUrl,
+          },
+        ]
+      : undefined,
+  };
+}
+
+// El paso que evita copiar el pedido a mano: aprueba la solicitud y crea el
+// Pedido real en un solo clic (decisión del usuario, 2026-08-02 — antes
+// exigía Aprobar como paso separado). Reutiliza pedidos.service.js tal cual
+// lo usa el resto del ERP; no reimplementa esa lógica.
 //
-// Nota de diseño (MVP): esto son dos pasos secuenciales, no una única
-// transacción — crearPedido() abre la suya propia. Si el segundo paso
-// (marcar CONVERTIDA) fallara, el Pedido igual queda creado correctamente;
+// Nota de diseño (MVP): aprobar+crearPedido+marcar CONVERTIDA no es una
+// única transacción — crearPedido() abre la suya propia. Si marcar
+// CONVERTIDA fallara después, el Pedido igual queda creado correctamente;
 // solo habría que reintentar el marcado. Lo que este servicio SÍ evita es
-// crear un Pedido duplicado por doble clic: exige estado === "APROBADA" y
-// lo deja en "CONVERTIDA" inmediatamente, así un segundo intento choca con
-// la validación de transición de arriba.
-export async function convertirSolicitud(solicitudId, empresaId, usuarioId, { fechaIngreso, fechaCompromiso }) {
+// un Pedido duplicado por doble clic: aprueba y queda en "CONVERTIDA"
+// inmediatamente, así un segundo intento choca con la validación de
+// transición de TRANSICIONES_SOLICITUD.
+export async function aprobarYConvertirSolicitud(solicitudId, empresaId, usuarioId, { fechaIngreso, fechaCompromiso }) {
   const solicitud = await obtenerSolicitud(solicitudId, empresaId);
-  if (solicitud.estado !== "APROBADA") {
-    throw new ValidacionError('Solo se puede convertir una solicitud en estado "APROBADA"');
+  const permitidas = TRANSICIONES_SOLICITUD[solicitud.estado] ?? [];
+  if (!permitidas.includes("APROBADA") && solicitud.estado !== "APROBADA") {
+    throw new ValidacionError(
+      `No se puede aprobar y convertir una solicitud en estado "${solicitud.estado}".`
+    );
   }
 
-  const cantidadTotal = solicitud.items.reduce((suma, item) => suma + item.cantidad, 0);
-  const detalleItems = solicitud.items
-    .map((item) => `${item.cantidad}x ${item.producto.nombre}${item.disenoNotas ? ` (${item.disenoNotas})` : ""}`)
-    .join("; ");
+  if (solicitud.estado !== "APROBADA") {
+    await prisma.$transaction(async (tx) => {
+      await tx.solicitudPedido.update({ where: { id: solicitudId }, data: { estado: "APROBADA", actualizadoEn: new Date() } });
+      await registrarAuditoria(tx, {
+        empresaId,
+        usuarioId,
+        accion: "solicitud_pedido.estado_cambiado",
+        detalle: { solicitudId, estadoAnterior: solicitud.estado, estadoNuevo: "APROBADA" },
+      });
+      await emit(SOLICITUD_ESTADO_CAMBIADO, {
+        tx,
+        solicitud: { ...solicitud, estado: "APROBADA" },
+        empresaId,
+        usuarioId,
+        estadoNuevo: "APROBADA",
+      });
+    }, TRANSACTION_OPTIONS);
+  }
+
+  const clienteId = await obtenerOCrearClienteParaSolicitud(empresaId, solicitud);
+  const lineas = solicitud.items.map(lineaDesdeSolicitudItem);
   const observaciones = [
-    `Origen: solicitud ${solicitud.solId} del catálogo público.`,
+    `Origen: solicitud ${solicitud.solId} del catálogo público${solicitud.numeroOrden ? ` (orden ${solicitud.numeroOrden})` : ""}.`,
     solicitud.clienteEmail ? `Email: ${solicitud.clienteEmail}.` : null,
     `Tel: ${solicitud.clienteTelefono}.`,
-    detalleItems ? `Ítems: ${detalleItems}.` : null,
-    solicitud.notasPersonalizacion ? `Personalización: ${solicitud.notasPersonalizacion}` : null,
+    solicitud.notasPersonalizacion ? `Notas: ${solicitud.notasPersonalizacion}` : null,
   ]
     .filter(Boolean)
     .join(" ");
 
   // No manda claveIdempotencia: la protección contra doble conversión ya la
-  // da la transición de estado de la solicitud misma (arriba: exige
-  // APROBADA, la deja en CONVERTIDA de inmediato), no la idempotencia de
-  // pedidos.service.js (esa es para el POST directo de /pedidos).
+  // da la transición de estado de la solicitud misma (deja en CONVERTIDA de
+  // inmediato), no la idempotencia de pedidos.service.js (esa es para el
+  // POST directo de /pedidos).
   const { pedido } = await crearPedido({
     empresaId,
     usuarioId,
     clienteNombre: solicitud.clienteNombre,
+    clienteId,
     fechaIngreso: fechaIngreso ?? new Date(),
     fechaCompromiso,
-    cantidadTotal,
+    tipoEntrega: mapearTipoEntrega(solicitud.tipoEntrega),
+    direccionAgencia: solicitud.agenciaEnvio || undefined,
     observaciones,
+    lineas,
   });
 
   const solicitudActualizada = await prisma.$transaction(async (tx) => {
@@ -318,7 +435,49 @@ export async function convertirSolicitud(solicitudId, empresaId, usuarioId, { fe
     await emit(SOLICITUD_CONVERTIDA, { tx, solicitud: actualizada, pedido, empresaId, usuarioId });
 
     return actualizada;
-  });
+  }, TRANSACTION_OPTIONS);
 
   return { solicitud: solicitudActualizada, pedido };
 }
+
+// Paso 3 (Bandeja de Solicitudes, 2026-08-02): cuando el Pedido vinculado a
+// una solicitud avanza de estado en el ERP, el cliente lo tiene que ver
+// reflejado en "Rastrea tu pedido" sin que nadie lo actualice a mano.
+// LISTO_RETIRO/PREPARANDO_ENVIO y DISPONIBLE_RETIRO/ENVIADO son ramas
+// alternativas según tipoEntrega (mismo criterio que ETAPAS_PUBLICAS
+// arriba) — nunca inventa un valor fuera de esa lista, porque el catálogo
+// (ETAPAS_INFO en catalogo/src/App.jsx) solo sabe dibujar esos 8 exactos.
+function estadoPublicoDesdeEstadoPedido(estadoPedido, tipoEntregaSolicitud) {
+  const esRetiro = tipoEntregaSolicitud !== "ENVIO";
+  switch (estadoPedido) {
+    case "EN_PRODUCCION":
+      return "PRODUCCION_INICIO";
+    case "LISTO":
+      return esRetiro ? "LISTO_RETIRO" : "PREPARANDO_ENVIO";
+    case "DESPACHADO":
+      return esRetiro ? "DISPONIBLE_RETIRO" : "ENVIADO";
+    case "ENTREGADO":
+    case "CERRADO":
+      return "ENTREGADO";
+    default:
+      // PENDIENTE/FACTURADO/CANCELADO: sin equivalente público más
+      // avanzado que RECIBIDO — no se toca (evita retroceder la barra si
+      // algún día existe una transición hacia atrás).
+      return null;
+  }
+}
+
+async function sincronizarEstadoPublicoSolicitud({ tx, pedido, estadoNuevo }) {
+  const solicitud = await tx.solicitudPedido.findFirst({ where: { pedidoId: pedido.id } });
+  if (!solicitud) return; // este Pedido no nació de una solicitud del catálogo
+
+  const estadoPublicoNuevo = estadoPublicoDesdeEstadoPedido(estadoNuevo, solicitud.tipoEntrega);
+  if (!estadoPublicoNuevo || estadoPublicoNuevo === solicitud.estadoPublico) return;
+
+  await tx.solicitudPedido.update({
+    where: { id: solicitud.id },
+    data: { estadoPublico: estadoPublicoNuevo, actualizadoEn: new Date() },
+  });
+}
+
+on(PEDIDO_ESTADO_CAMBIADO, sincronizarEstadoPublicoSolicitud);

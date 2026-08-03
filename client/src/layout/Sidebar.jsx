@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { MODULOS } from "../nav/modules";
 import { moduloVisible } from "../nav/permisos";
 import { useAuth } from "../auth/AuthContext";
+import { api } from "../api/client";
 
 // Rail de nivel 1: siempre visible, se puede colapsar a solo íconos.
 // Colapsar es una preferencia puramente visual (ancho), nunca de permisos —
@@ -9,6 +11,19 @@ import { useAuth } from "../auth/AuthContext";
 export function Sidebar({ colapsado }) {
   const { perfil } = useAuth();
   const permisos = perfil?.rol?.permisos;
+
+  // Bandeja de Solicitudes (2026-08-02): "Solicitudes (N)" para que nadie
+  // se olvide de revisar lo que llega del catálogo. Se pide una sola vez al
+  // montar el sidebar (no hay socket/push todavía) — suficiente para el
+  // caso de uso real: alguien abre el ERP y ve si hay algo nuevo.
+  const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
+  useEffect(() => {
+    if (!permisos?.ver_pedidos) return;
+    api
+      .getSolicitudes("RECIBIDA")
+      .then((lista) => setSolicitudesPendientes(lista.length))
+      .catch(() => {});
+  }, [permisos]);
 
   return (
     <aside className={`sidebar${colapsado ? " sidebar-colapsado" : ""}`}>
@@ -34,7 +49,12 @@ export function Sidebar({ colapsado }) {
             title={m.label}
           >
             <span className="sidebar-item-icono">{m.icon}</span>
-            {!colapsado && <span className="sidebar-item-label">{m.label}</span>}
+            {!colapsado && (
+              <span className="sidebar-item-label">
+                {m.label}
+                {m.key === "solicitudes" && solicitudesPendientes > 0 && ` (${solicitudesPendientes})`}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
