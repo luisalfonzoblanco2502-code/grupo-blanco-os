@@ -5,11 +5,6 @@ import { api } from "../../api/client";
 import { SituacionBadge } from "../../components/SituacionBadge";
 import { formatoTamano, iconoArchivo } from "../../utils/storage";
 
-const ESTADO_ETAPA = {
-  completada: "Completada",
-  enCurso: "En curso",
-};
-
 function Campo({ label, valor }) {
   return (
     <div className="op-campo">
@@ -227,31 +222,12 @@ export function OrdenProduccionImprimir() {
           )}
         </section>
 
-        <section style={{ pageBreakInside: "avoid" }}>
-          <h2>Producción</h2>
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th>Etapa</th>
-                <th>Responsable</th>
-                <th>Estado</th>
-                <th>Inicio</th>
-                <th>Fin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orden.tiemposPorEtapa.map((t, i) => (
-                <tr key={i} style={{ pageBreakInside: "avoid" }}>
-                  <td>{t.etapa}</td>
-                  <td>{t.responsable ?? "—"}</td>
-                  <td>{t.hasta ? ESTADO_ETAPA.completada : ESTADO_ETAPA.enCurso}</td>
-                  <td>{new Date(t.desde).toLocaleString()}</td>
-                  <td>{t.hasta ? new Date(t.hasta).toLocaleString() : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+        {/* Historial detallado de tiempo por etapa (ETAPA/RESPONSABLE/ESTADO/
+            INICIO/FIN) — a pedido explícito, sacado SOLO del documento
+            impreso/PDF (2026-08-03). Sigue viéndose en la pantalla normal
+            de la orden (OrdenProduccionDetail.jsx, sección "Tiempo por
+            etapa"), que es un componente distinto — este archivo es
+            únicamente la vista de impresión. */}
 
         <footer className="op-pie">
           <div className="op-grid">

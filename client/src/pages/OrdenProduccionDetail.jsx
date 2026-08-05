@@ -140,20 +140,26 @@ export function OrdenProduccionDetail() {
             🧩 Variantes ({variantes.length})
           </div>
           <div className="variantes-lista">
-            {variantes.map((v, i) => {
-              const img = v.archivosAdjuntos?.find((a) => a.esPrincipal);
+            {variantes.map((v) => {
+              const archivoPrincipal = v.archivosAdjuntos?.find((a) => a.esPrincipal);
               const adjuntos = v.archivosAdjuntos?.filter((a) => !a.esPrincipal) ?? [];
+              // Mismo fallback que OrdenProduccionImprimir.jsx: catálogo
+              // regular guarda la foto en imagenReferenciaProduccionUrl
+              // (snapshot del Producto Maestro); personalizado la guarda en
+              // archivosAdjuntos (foto que subió el cliente). Antes esta
+              // vista en vivo solo miraba la segunda — nunca la primera.
+              const imagenMostrar = v.imagenReferenciaProduccionUrl || archivoPrincipal?.ubicacion;
               return (
                 <div className="variante-item" key={v.id}>
                   <div className="variante-miniatura">
-                    {img ? (
-                      <img src={img.ubicacion} alt="" style={{ width: "3rem", height: "3rem", borderRadius: "6px", objectFit: "cover" }} />
+                    {imagenMostrar ? (
+                      <img src={imagenMostrar} alt="" style={{ width: "3rem", height: "3rem", borderRadius: "6px", objectFit: "cover" }} />
                     ) : (
                       <div style={{ width: "3rem", height: "3rem", borderRadius: "6px", background: "var(--surface-sunken)" }} />
                     )}
                   </div>
                   <div className="variante-datos">
-                    <span className="card-label">Variante {i + 1}</span>
+                    <span className="card-label">{v.producto}</span>
                     <div className="op-grid">
                       <Campo label="Cantidad" valor={v.cantidad} />
                       <Campo label="Talla" valor={v.talla} />
